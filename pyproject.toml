@@ -20,6 +20,7 @@ dependencies = [
     "langchain-community>=0.3.23",
     "langchain-openai>=0.3.16",
     "langchain-chroma>=0.2.3",
+    "sphinx-rtd-theme>=3.0.2",
 ]
 
 [build-system]
@@ -32,9 +33,12 @@ dev = [
     "build>=1.2.2.post1",
     "isort>=6.0.1",
     "mypy>=1.15.0",
+    "myst-parser>=4.0.1",
     "pytest>=8.3.5",
     "pytest-cov>=6.1.1",
     "ruff>=0.11.8",
+    "sphinx>=8.2.3",
+    "sphinx-pyproject>=0.3.0",
 ]
 
 [project.scripts]
@@ -80,3 +84,28 @@ filterwarnings = [
     "ignore::UserWarning",
     "ignore::ResourceWarning"
 ]
+
+[tool.sphinx-pyproject]
+project = 'codantix'
+copyright = '2025, Adiel'
+author = 'Adiel'
+language = "en"
+package_root = "codantix"
+templates_path = ['_templates']
+exclude_patterns = [
+    "_build",
+    ".DS_Store"
+]
+extensions = [
+    "sphinx.ext.duration",
+    "sphinx.ext.doctest",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.intersphinx",
+    'myst_parser',
+    'sphinx.ext.autosectionlabel',
+    'sphinx.ext.napoleon',
+    'sphinx_rtd_theme'
+]
+html_theme = 'sphinx_rtd_theme'
+html_static_path = ['_static']
+autosectionlabel_prefix_document = true
