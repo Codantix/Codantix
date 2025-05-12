@@ -16,6 +16,10 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "pyyaml>=6.0.0",
     "esprima>=4.0.1",
+    "langchain-google-genai>=2.1.4",
+    "langchain-community>=0.3.23",
+    "langchain-openai>=0.3.16",
+    "langchain-chroma>=0.2.3",
 ]
 
 [build-system]
@@ -35,3 +39,44 @@ dev = [
 
 [project.scripts]
 codantix = "codantix.cli:cli"
+
+[tool.coverage.run]
+branch = true
+source = ["codantix/"]
+omit = [
+    "codantix/cli.py",
+    "tests/*",
+    "setup.py",
+    "*.pyc",
+    "*.pyo",
+    "*.pyd",
+    "__pycache__/*", 
+    "codantix/splink_example.py"
+]
+
+[tool.coverage.paths]
+source = ["codantix/"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 0
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+    "raise ImportError"
+]
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests"
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+    "ignore::ImportWarning",
+    "ignore::UserWarning",
+    "ignore::ResourceWarning"
+]

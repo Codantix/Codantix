@@ -49,10 +49,75 @@ Create a `codantix.config.json` file in your project root:
   "languages": ["python", "javascript", "java"],
   "vector_db": {
     "type": "chroma",
-    "path": "vecdb/"
+    "path": "vecdb/",
+    "collection": "codantix_docs"
   }
 }
 ```
+
+### Vector Database Configuration
+
+Codantix supports multiple vector DBs via LangChain:
+- **Chroma** (local, default)
+- **Qdrant** (local/external)
+- **Milvus** (external, requires env for user/password)
+- **Milvus Lite** (embedded/local)
+
+#### Example config for Chroma (local)
+```json
+{
+  "vector_db": {
+    "type": "chroma",
+    "path": "vecdb/",
+    "collection": "codantix_docs"
+  }
+}
+```
+
+#### Example config for Qdrant (local/external)
+```json
+{
+  "vector_db": {
+    "type": "qdrant",
+    "host": "localhost",
+    "port": 6333,
+    "api_key": "<QDRANT_API_KEY>",
+    "collection": "codantix_docs"
+  }
+}
+```
+
+#### Example config for Milvus (external)
+```json
+{
+  "vector_db": {
+    "type": "milvus",
+    "host": "localhost",
+    "port": 19530,
+    "collection": "codantix_docs"
+    // User and password are always taken from the environment:
+    // MILVUS_USER and MILVUS_PASSWORD
+  }
+}
+```
+
+#### Example config for Milvus Lite (embedded/local)
+```json
+{
+  "vector_db": {
+    "type": "milvus_lite",
+    "path": "vecdb/",
+    "collection": "codantix_docs"
+  }
+}
+```
+
+### Milvus Credentials
+For Milvus (external), set the following environment variables:
+- `MILVUS_USER` (e.g., "root")
+- `MILVUS_PASSWORD` (your password)
+
+These are **never** read from the config file for security.
 
 ---
 
