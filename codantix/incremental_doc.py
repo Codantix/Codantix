@@ -5,9 +5,11 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set
 from dataclasses import dataclass
 from .git_integration import GitIntegration, FileChange
-from .documentation import CodeElement, ElementType
+from .documentation import CodeElement, ElementType, ReadmeParser
 from .doc_generator import DocumentationGenerator, DocStyle
 from .parsers import get_parser
+from .config import Config
+import os
 
 @dataclass
 class DocumentationChange:
@@ -80,10 +82,14 @@ class IncrementalDocumentation:
 
     def _get_project_context(self, commit_sha: str) -> Dict:
         """Get project context for documentation generation."""
-        # TODO: Implement project context extraction
-        return {
-            "name": "test_project",
-            "description": "Test project",
-            "architecture": "Test architecture",
-            "purpose": "Test purpose"
-        } 
+        # Try to get project name from config
+        config = Config()
+        project_name = os.path.basename(os.path.abspath(self.repo_path))
+        if 'name' in config.config:
+            project_name = config.config['name']
+
+        # Try to extract context from README.md in repo root
+        readme_path = Path(self.repo_path) / "README.md"
+        context = ReadmeParser().parse(readme_path)
+        context['name'] = project_name
+        return context 
