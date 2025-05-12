@@ -51,9 +51,12 @@ def test_javascript_parser():
  * Module docstring
  */
 
+/**
+* Class docstring
+*/
 class TestClass {
     /**
-     * Class docstring
+     * constructor docstring
      */
     constructor() {}
     
@@ -70,12 +73,21 @@ function testFunction() {}
 '''
     
     elements = parser.parse_file(content, 1, 30)
-    assert len(elements) == 4
+    assert len(elements) == 5
+    
+    # Check module docstring
+    module = next(e for e in elements if e.type == ElementType.MODULE)
+    assert module.name == "module"
+    assert "Module docstring" in module.docstring
     
     # Check class
     class_elem = next(e for e in elements if e.type == ElementType.CLASS)
     assert class_elem.name == "TestClass"
     assert "Class docstring" in class_elem.docstring
+    
+    # Check constructor method
+    constructor = next(e for e in elements if e.type == ElementType.METHOD and e.name == "constructor")
+    assert "constructor docstring" in constructor.docstring
     
     # Check method
     method = next(e for e in elements if e.type == ElementType.METHOD and e.name == "testMethod")
