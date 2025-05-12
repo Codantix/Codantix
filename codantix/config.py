@@ -48,9 +48,9 @@ class Config:
                 "type": VectorDBType.CHROMA.value,
                 "path": "vecdb/"
             },
-            "embedding": "text-embedding-3-large",
-            "provider": "openai",
-            "dimensions": 1024
+            "embedding": "thenlper/gte-base",
+            "provider": "huggingface",
+            "dimensions": 512
         }
 
     def _validate_config(self) -> None:

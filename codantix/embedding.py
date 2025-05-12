@@ -6,13 +6,18 @@ from pathlib import Path
 from .config import Config
 
 # LangChain imports
-from langchain_openai import OpenAIEmbeddings
+
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 import os
 
 try:
-    from langchain_community.embeddings import HuggingFaceEmbeddings
+    from langchain_openai import OpenAIEmbeddings
+except ImportError:
+    OpenAIEmbeddings = None
+
+try:
+    from langchain_huggingface import HuggingFaceEmbeddings
 except ImportError:
     HuggingFaceEmbeddings = None
 
@@ -58,15 +63,15 @@ class EmbeddingManager:
         """
         Initialize the embedding function based on provider and config.
         """
-        if self.provider == "openai":
-            openai_api_key = os.getenv("OPENAI_API_KEY")
-            if not openai_api_key:
-                raise ValueError("OPENAI_API_KEY environment variable not set.")
-            return OpenAIEmbeddings(model=self.embedding_model, openai_api_key=openai_api_key)
-        elif self.provider == "huggingface":
+        if self.provider == "huggingface":
             if HuggingFaceEmbeddings is None:
                 raise ImportError("langchain_community.embeddings.HuggingFaceEmbeddings is not installed.")
             return HuggingFaceEmbeddings(model_name=self.embedding_model)
+        elif self.provider == "openai":
+            if OpenAIEmbeddings is None:
+                raise ValueError("OPENAI_API_KEY environment variable not set.")
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            return OpenAIEmbeddings(model=self.embedding_model, openai_api_key=openai_api_key)
         elif self.provider == "google":
             if GoogleGenerativeAIEmbeddings is None:
                 raise ImportError("langchain_google_genai.GoogleGenerativeAIEmbeddings is not installed.")
