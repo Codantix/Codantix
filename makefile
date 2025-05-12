@@ -22,7 +22,7 @@ sync: install-uv
 
 # Run tests with coverage reporting
 test:
-	pytest --cov=. --cov-report=html --cov-report=term-missing --cov-report=xml --junitxml=report.xml
+	pytest --cov=. --cov-report=html --cov-report=term-missing --cov-report=xml --junitxml=report.xml --cov-branch
 
 # Build documentation
 docs:

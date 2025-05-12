@@ -1,0 +1,13 @@
+{
+  "doc_style": "google",
+  "source_paths": ["src", "lib", "packages"],
+  "languages": ["python", "javascript", "java"],
+  "vector_db": {
+    "type": "chroma",
+    "path": "vecdb/",
+    "collection": "codantix_docs"
+  },
+  "embedding": "text-embedding-3-large",
+  "provider": "openai",
+  "dimensions": 1024
+} 
