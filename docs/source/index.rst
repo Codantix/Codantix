@@ -12,6 +12,7 @@ Welcome to Codantix's documentation!
    usage
    configuration
    modules
+   tutorials
 
 Indices and tables
 ==================

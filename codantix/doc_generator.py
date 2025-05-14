@@ -4,18 +4,13 @@ Documentation generation for Codantix.
 This module provides the DocumentationGenerator class, which generates documentation for code elements using LLMs and customizable templates.
 Supports Google, NumPy, and JSDoc styles.
 """
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from dataclasses import dataclass
-from enum import Enum
 import openai
 from pathlib import Path
 from .documentation import CodeElement, ElementType
+from .config import DocStyle
 
-class DocStyle(Enum):
-    """Supported documentation styles."""
-    GOOGLE = "google"
-    NUMPY = "numpy"
-    JSDOC = "jsdoc"
 
 @dataclass
 class DocTemplate:

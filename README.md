@@ -16,6 +16,8 @@
 - Scans the entire project and adds or updates documentation
 - Reads context from `README.md`
 - Supports user-defined doc styles and source paths
+- Supports a `--freeze` mode to only extract and embed existing docstrings, without generating or updating them
+- Supports a `--version` parameter to tag all indexed documents with a version identifier for later filtering or retrieval
 
 ### 🔁 Pull Request Diff Documentation
 - Automatically documents only changed functions/classes in PRs
@@ -124,12 +126,16 @@ These are **never** read from the config file for security.
 ## 🚀 CLI Usage
 
 ```bash
-codantix init              # Generate docs for full repo
-codantix doc-pr <sha>      # Document only changed code in a pull request
-codantix update-db         # Update vector database with latest docs
+codantix init                      # Generate docs for full repo
+codantix init --freeze             # Only extract and embed existing docstrings, do not generate or update
+codantix init --version v1.2.0     # Index docs and tag with version 'v1.2.0'
+codantix doc-pr <sha> --version v1.2.0  # Document only changed code in a PR, tag with version
+codantix update-db --version v1.2.0     # Update vector DB and tag all docs with version
 ```
 
-> Codantix is designed to respect and reuse existing documentation, updating only where needed.
+> Codantix is designed to respect and reuse existing documentation, updating only where needed. Use `--freeze` to 
+strictly preserve all existing docstrings and only embed them for search.
+> Use the `--version` flag to tag all indexed documents with a version identifier. This is useful for tracking, filtering, or retrieving documentation and embeddings for a specific release or snapshot.
 
 ---
 
@@ -156,7 +162,7 @@ More languages coming soon...
 
 ## 📄 License
 
-MIT License — see [`LICENSE`](LICENSE) for details.
+MIT License — see [`LICENSE`](https://github.com/MatufA/Codantix/blob/main/LICENSE) for details.
 
 ---
 

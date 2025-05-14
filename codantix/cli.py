@@ -24,11 +24,17 @@ def cli():
     pass
 
 @cli.command()
-def init():
+@click.option('--version', default=None, help='Version identifier for the indexed code.')
+@click.option('--freeze', is_flag=True, default=False, help='Freeze documentation: only extract and embed existing docstrings, do not generate or update.')
+def init(version, freeze):
     """Initialize and document the entire repository.
 
     Scans all configured source paths, generates or updates documentation for all code elements,
     and updates the vector database with the new documentation.
+
+    Args:
+        version (str, optional): Version identifier for the indexed code. If provided, this version will be included in the metadata for all indexed documents.
+        freeze (bool, optional): If set, only extract and embed existing docstrings without generating or updating documentation.
 
     Raises:
         SystemExit: If an error occurs during initialization.
@@ -50,18 +56,24 @@ def init():
                 continue
             elements = traverser.traverse(src_path)
             for element in elements:
-                doc = generator.generate_doc(element, context)
+                if freeze:
+                    doc = element.existing_doc or ''
+                else:
+                    doc = generator.generate_doc(element, context)
+                metadata = {
+                    k: v for k, v in {
+                        "file_path": str(element.file_path),
+                        "element": element.name,
+                        "type": element.type.value,
+                        "line": element.line_number,
+                        "parent": element.parent,
+                    }.items() if v is not None and isinstance(v, (str, int, float, bool))
+                }
+                if version is not None:
+                    metadata["version"] = version
                 docs.append({
                     "text": doc,
-                    "metadata": {
-                        k: v for k, v in {
-                            "file_path": str(element.file_path),
-                            "element": element.name,
-                            "type": element.type.value,
-                            "line": element.line_number,
-                            "parent": element.parent,
-                        }.items() if v is not None and isinstance(v, (str, int, float, bool))
-                    }
+                    "metadata": metadata
                 })
         if docs:
             emb_mgr = EmbeddingManager(config)
@@ -73,11 +85,13 @@ def init():
 
 @cli.command()
 @click.argument('sha')
-def doc_pr(sha: str):
+@click.option('--version', default=None, help='Version identifier for the indexed code.')
+def doc_pr(sha: str, version):
     """Document changes in a pull request.
 
     Args:
         sha (str): The commit SHA identifying the pull request or commit to document.
+        version (str, optional): Version identifier for the indexed code. If provided, this version will be included in the metadata for all indexed documents.
 
     Scans the code changes in the specified commit, generates or updates documentation for changed elements,
     and updates the vector database accordingly.
@@ -98,17 +112,20 @@ def doc_pr(sha: str):
         for change in changes:
             click.echo(f"{change.change_type.title()}: {change.element.file_path}::{change.element.name}")
             if change.change_type in ("new", "update"):
+                metadata = {
+                    k: v for k, v in {
+                        "file_path": str(change.element.file_path),
+                        "element": change.element.name,
+                        "type": change.element.type.value,
+                        "line": change.element.line_number,
+                        "parent": change.element.parent,
+                    }.items() if v is not None and isinstance(v, (str, int, float, bool))
+                }
+                if version is not None:
+                    metadata["version"] = version
                 docs.append({
                     "text": change.new_doc,
-                    "metadata": {
-                        k: v for k, v in {
-                            "file_path": str(change.element.file_path),
-                            "element": change.element.name,
-                            "type": change.element.type.value,
-                            "line": change.element.line_number,
-                            "parent": change.element.parent,
-                        }.items() if v is not None and isinstance(v, (str, int, float, bool))
-                    }
+                    "metadata": metadata
                 })
             elif change.change_type == "D":
                 deleted_files.add(str(change.element.file_path))
@@ -134,10 +151,14 @@ def doc_pr(sha: str):
         sys.exit(1)
 
 @cli.command()
-def update_db():
+@click.option('--version', default=None, help='Version identifier for the indexed code.')
+def update_db(version):
     """Update the vector database with documentation.
 
     Scans all configured source paths, generates documentation for all code elements, and updates the vector database.
+
+    Args:
+        version (str, optional): Version identifier for the indexed code. If provided, this version will be included in the metadata for all indexed documents.
 
     Raises:
         SystemExit: If an error occurs during the update.
@@ -160,17 +181,20 @@ def update_db():
             elements = traverser.traverse(src_path)
             for element in elements:
                 doc = generator.generate_doc(element, context)
+                metadata = {
+                    k: v for k, v in {
+                        "file_path": str(element.file_path),
+                        "element": element.name,
+                        "type": element.type.value,
+                        "line": element.line_number,
+                        "parent": element.parent,
+                    }.items() if v is not None and isinstance(v, (str, int, float, bool))
+                }
+                if version is not None:
+                    metadata["version"] = version
                 docs.append({
                     "text": doc,
-                    "metadata": {
-                        k: v for k, v in {
-                            "file_path": str(element.file_path),
-                            "element": element.name,
-                            "type": element.type.value,
-                            "line": element.line_number,
-                            "parent": element.parent,
-                        }.items() if v is not None and isinstance(v, (str, int, float, bool))
-                    }
+                    "metadata": metadata
                 })
         emb_mgr = EmbeddingManager(config)
         emb_mgr.update_database(docs)
