@@ -1,5 +1,8 @@
 """
 Embedding and vector database management for Codantix.
+
+This module provides the EmbeddingManager class, which handles embedding generation and storage in a vector database using LangChain.
+Supports multiple providers (OpenAI, HuggingFace, Google) and vector DBs (Chroma, Qdrant, Milvus, Milvus Lite).
 """
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -44,10 +47,17 @@ except ImportError:
 class EmbeddingManager:
     """
     Handles embedding generation and storage in a vector database using LangChain.
+
     Provider-agnostic: supports OpenAI, HuggingFace, Google (Gemini/Vertex AI), and can be extended.
     Vector DB-agnostic: supports Chroma (local), Qdrant (local/external), Milvus (external), Milvus Lite (embedded/local), and can be extended.
     """
     def __init__(self, config: Optional[Config] = None):
+        """
+        Initialize the EmbeddingManager.
+
+        Args:
+            config (Optional[Config]): Optional configuration object. If not provided, a default Config is used.
+        """
         self.config = config or Config()
         self.embedding_model = self.config.config.get("embedding", "text-embedding-3-large")
         self.provider = self.config.config.get("provider", "openai")
@@ -62,6 +72,14 @@ class EmbeddingManager:
     def _init_embedding_function(self):
         """
         Initialize the embedding function based on provider and config.
+
+        Returns:
+            Embedding function instance compatible with LangChain.
+
+        Raises:
+            ImportError: If the required embedding provider is not installed.
+            ValueError: If required API keys are not set in the environment.
+            NotImplementedError: If the provider is not supported.
         """
         if self.provider == "huggingface":
             if HuggingFaceEmbeddings is None:
@@ -84,8 +102,14 @@ class EmbeddingManager:
 
     def _init_vector_db(self):
         """
-        Initialize the vector database based on config. Supports Chroma (local), Qdrant (local/external), Milvus (external), Milvus Lite (embedded/local).
-        Extend this method to add more vector DBs.
+        Initialize the vector database based on config.
+
+        Returns:
+            Vector database instance compatible with LangChain.
+
+        Raises:
+            ImportError: If the required vector DB provider is not installed.
+            NotImplementedError: If the vector DB type is not supported.
         """
         if self.vector_db_type == "chroma":
             return Chroma(
@@ -144,12 +168,22 @@ class EmbeddingManager:
     def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
         Generate embeddings for a list of texts using the configured model/provider.
+
+        Args:
+            texts (List[str]): List of text strings to embed.
+
+        Returns:
+            List[List[float]]: List of embedding vectors.
         """
         return self.embeddings.embed_documents(texts)
 
     def store_embeddings(self, texts: List[str], metadatas: List[Dict[str, Any]]):
         """
         Store texts and their metadata in the configured vector database.
+
+        Args:
+            texts (List[str]): List of text strings to store.
+            metadatas (List[Dict[str, Any]]): List of metadata dictionaries for each text.
         """
         docs = [Document(page_content=text, metadata=meta) for text, meta in zip(texts, metadatas)]
         self.db.add_documents(docs)
@@ -160,7 +194,9 @@ class EmbeddingManager:
     def update_database(self, docs: List[Dict[str, Any]]):
         """
         Generate and store embeddings for a batch of documentation entries.
-        Each doc should have at least a 'text' field and metadata.
+
+        Args:
+            docs (List[Dict[str, Any]]): List of documentation entries, each with a 'text' field and metadata.
         """
         texts = [doc["text"] for doc in docs]
         metadatas = [doc.get("metadata", {}) for doc in docs]

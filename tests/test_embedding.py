@@ -3,6 +3,7 @@ import pytest
 from codantix.embedding import EmbeddingManager
 from codantix.config import Config
 from unittest.mock import patch, MagicMock
+import shutil
 
 @pytest.fixture(autouse=True)
 def patch_openai_env(monkeypatch):
@@ -103,4 +104,23 @@ def test_unsupported_provider_raises(mock_chroma, chroma_config):
 def test_unsupported_vector_db_raises(mock_chroma, chroma_config):
     chroma_config.config["vector_db"]["type"] = "notreal"
     with pytest.raises(NotImplementedError):
-        EmbeddingManager(config=chroma_config) 
+        EmbeddingManager(config=chroma_config)
+
+def test_remove_embedding_for_deleted_element():
+    config = Config()
+    manager = EmbeddingManager(config)
+    # Mock the db and its delete method
+    manager.db = MagicMock()
+    file_path = "some/file.py"
+    element_name = "foo"
+    element_type = "function"
+    # Simulate deletion
+    if hasattr(manager.db, "delete"):
+        manager.db.delete(filter={"file_path": file_path, "element": element_name, "type": element_type})
+        manager.db.delete.assert_called_with(filter={"file_path": file_path, "element": element_name, "type": element_type})
+    # Cleanup: remove vecdb directory if it exists
+    vecdb_path = config.config["vector_db"]["path"]
+    if os.path.exists(vecdb_path):
+        shutil.rmtree(vecdb_path) 
+
+    

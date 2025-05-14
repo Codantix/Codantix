@@ -1,5 +1,7 @@
 """
 Language-specific code parsers for Codantix.
+
+This module provides parsers for Python and JavaScript/TypeScript code, extracting code elements and their docstrings for documentation generation.
 """
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -9,30 +11,67 @@ from .documentation import CodeElement, ElementType
 import logging
 
 class BaseParser:
-    """Base class for language-specific parsers."""
+    """
+    Base class for language-specific parsers.
+    """
     
     def __init__(self):
-        """Initialize the parser."""
+        """
+        Initialize the parser.
+        """
         self.supported_extensions: List[str] = []
 
     def parse_file(self, content: str, start_line: int, end_line: int) -> List[CodeElement]:
-        """Parse file content and extract code elements."""
+        """
+        Parse file content and extract code elements.
+
+        Args:
+            content (str): File content as a string.
+            start_line (int): Start line number for parsing.
+            end_line (int): End line number for parsing.
+
+        Returns:
+            List[CodeElement]: List of code elements found in the file.
+        """
         raise NotImplementedError
 
     def extract_docstring(self, content: str, element_type: ElementType) -> Optional[str]:
-        """Extract docstring from code element."""
+        """
+        Extract docstring from code element.
+
+        Args:
+            content (str): Code element content as a string.
+            element_type (ElementType): Type of code element.
+
+        Returns:
+            Optional[str]: Extracted docstring, if found.
+        """
         raise NotImplementedError
 
 class PythonParser(BaseParser):
-    """Parser for Python code."""
+    """
+    Parser for Python code.
+    """
 
     def __init__(self):
-        """Initialize Python parser."""
+        """
+        Initialize Python parser.
+        """
         super().__init__()
         self.supported_extensions = ['.py']
 
     def parse_file(self, content: str, start_line: int, end_line: int) -> List[CodeElement]:
-        """Parse Python file content and extract code elements."""
+        """
+        Parse Python file content and extract code elements.
+
+        Args:
+            content (str): File content as a string.
+            start_line (int): Start line number for parsing.
+            end_line (int): End line number for parsing.
+
+        Returns:
+            List[CodeElement]: List of code elements found in the file.
+        """
         elements = []
         try:
             tree = ast.parse(content)
@@ -76,7 +115,15 @@ class PythonParser(BaseParser):
         return elements
 
     def _get_docstring(self, node: ast.AST) -> Optional[str]:
-        """Extract docstring from an AST node."""
+        """
+        Extract docstring from an AST node.
+
+        Args:
+            node (ast.AST): AST node representing a function or class.
+
+        Returns:
+            Optional[str]: Extracted docstring, if found.
+        """
         if not isinstance(node, (ast.FunctionDef, ast.ClassDef)):
             return None
 
@@ -90,14 +137,29 @@ class PythonParser(BaseParser):
         return None
 
 class JavaScriptParser(BaseParser):
-    """Parser for JavaScript code."""
+    """
+    Parser for JavaScript and TypeScript code.
+    """
 
     def __init__(self):
-        """Initialize JavaScript parser."""
+        """
+        Initialize JavaScript parser.
+        """
         super().__init__()
         self.supported_extensions = ['.js', '.jsx', '.ts', '.tsx']
 
     def _get_jsdoc(self, node: Any, block_comments_by_end_line: dict = None, source_lines: list = None) -> Optional[str]:
+        """
+        Extract JSDoc-style docstring from a JavaScript AST node.
+
+        Args:
+            node (Any): JavaScript AST node.
+            block_comments_by_end_line (dict, optional): Mapping of end lines to block comments.
+            source_lines (list, optional): Source lines of the file.
+
+        Returns:
+            Optional[str]: Extracted JSDoc docstring, if found.
+        """
         # Try leadingComments first
         if leading_comments := getattr(node, 'leadingComments', None):
             for comment_obj in reversed(leading_comments):
@@ -121,6 +183,15 @@ class JavaScriptParser(BaseParser):
         return None
 
     def _clean_jsdoc(self, value: str) -> Optional[str]:
+        """
+        Clean and normalize a JSDoc comment string.
+
+        Args:
+            value (str): Raw JSDoc comment string.
+
+        Returns:
+            Optional[str]: Cleaned docstring, if found.
+        """
         if not isinstance(value, str) or not value:
             return None 
         lines = value.split('\n')
@@ -134,6 +205,22 @@ class JavaScriptParser(BaseParser):
         return '\n'.join(cleaned_lines) if cleaned_lines else None
 
     def _collect_elements_recursive(self, node: Any, visited_nodes: set, elements_list: List[CodeElement], file_path: Path, start_line_filter: int, end_line_filter: int, block_comments_by_end_line: dict = None, source_lines: list = None) -> List[CodeElement]:
+        """
+        Recursively collect code elements from a JavaScript AST node.
+
+        Args:
+            node (Any): JavaScript AST node.
+            visited_nodes (set): Set of visited node IDs to avoid cycles.
+            elements_list (List[CodeElement]): Accumulated list of code elements.
+            file_path (Path): Path to the file being parsed.
+            start_line_filter (int): Start line number for filtering.
+            end_line_filter (int): End line number for filtering.
+            block_comments_by_end_line (dict, optional): Mapping of end lines to block comments.
+            source_lines (list, optional): Source lines of the file.
+
+        Returns:
+            List[CodeElement]: List of code elements found in the AST.
+        """
         if node is None or id(node) in visited_nodes:
             return elements_list
         
@@ -220,6 +307,17 @@ class JavaScriptParser(BaseParser):
         return elements_list
 
     def parse_file(self, content: str, start_line: int, end_line: int) -> List[CodeElement]:
+        """
+        Parse JavaScript/TypeScript file content and extract code elements.
+
+        Args:
+            content (str): File content as a string.
+            start_line (int): Start line number for parsing.
+            end_line (int): End line number for parsing.
+
+        Returns:
+            List[CodeElement]: List of code elements found in the file.
+        """
         elements: List[CodeElement] = []
         try:
             tree = esprima.parseScript(content, {
@@ -264,7 +362,15 @@ class JavaScriptParser(BaseParser):
         return elements
 
 def get_parser(file_path: Path) -> Optional[BaseParser]:
-    """Get appropriate parser for file type."""
+    """
+    Get appropriate parser for file type.
+
+    Args:
+        file_path (Path): Path to the file.
+
+    Returns:
+        Optional[BaseParser]: Parser instance for the file type, or None if unsupported.
+    """
     extension = file_path.suffix.lower()
     
     if extension in ['.py']:

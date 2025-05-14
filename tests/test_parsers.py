@@ -3,8 +3,9 @@ Tests for language-specific parsers.
 """
 import pytest
 from pathlib import Path
-from codantix.parsers import PythonParser, JavaScriptParser, get_parser
+from codantix.parsers import PythonParser, JavaScriptParser, get_parser, BaseParser
 from codantix.documentation import ElementType
+import ast
 
 def test_python_parser():
     """Test Python code parsing."""
@@ -135,4 +136,72 @@ def test_javascript_complex():
     assert method.name == "complexMethod"
     assert "Complex method with parameters" in method.docstring
     assert "@param" in method.docstring
-    assert "@returns" in method.docstring 
+    assert "@returns" in method.docstring
+
+def test_baseparser_notimplemented():
+    base = BaseParser()
+    with pytest.raises(NotImplementedError):
+        base.parse_file("", 1, 1)
+    with pytest.raises(NotImplementedError):
+        base.extract_docstring("", ElementType.FUNCTION)
+
+
+def test_pythonparser_get_docstring():
+    parser = PythonParser()
+    # Not a function/class
+    assert parser._get_docstring(ast.parse("x = 1").body[0]) is None
+    # Function with no body
+    func = ast.FunctionDef(name="f", args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]), body=[], decorator_list=[])
+    assert parser._get_docstring(func) is None
+    # Function with non-docstring first node
+    func.body = [ast.Pass()]
+    assert parser._get_docstring(func) is None
+    # Function with docstring
+    func.body = [ast.Expr(value=ast.Constant(value="doc"))]
+    assert parser._get_docstring(func) == "doc"
+
+
+def test_javascriptparser_clean_jsdoc():
+    parser = JavaScriptParser()
+    # None or empty
+    assert parser._clean_jsdoc(None) is None
+    assert parser._clean_jsdoc("") is None
+    # No stars
+    assert parser._clean_jsdoc("Just a line") == "Just a line"
+    # With stars and whitespace
+    jsdoc = """*
+ * Foo
+ * Bar
+ """
+    assert parser._clean_jsdoc(jsdoc) == "Foo\nBar"
+
+
+def test_javascriptparser_get_jsdoc_leading():
+    parser = JavaScriptParser()
+    class Dummy:
+        pass
+    comment = type("Comment", (), {"type": "Block", "value": "* JSDoc"})()
+    node = Dummy()
+    node.leadingComments = [comment]
+    assert parser._get_jsdoc(node) == "JSDoc"
+
+
+def test_javascriptparser_get_jsdoc_block_comments():
+    parser = JavaScriptParser()
+    class Dummy:
+        pass
+    # Set up a comment ending at line 2, node starting at line 3
+    comment = type("Comment", (), {"type": "Block", "value": "* JSDoc", "loc": type("Loc", (), {"end": type("End", (), {"line": 2})()})()})()
+    node = Dummy()
+    node.loc = type("Loc", (), {"start": type("Start", (), {"line": 3})()})()
+    block_comments = {2: comment}
+    # No code between comment and node
+    source_lines = ["", "", ""]
+    assert parser._get_jsdoc(node, block_comments, source_lines) == "JSDoc"
+
+
+def test_javascriptparser_collect_elements_recursive_none():
+    parser = JavaScriptParser()
+    # Should not fail on None
+    out = parser._collect_elements_recursive(None, set(), [], Path(""), 1, 10)
+    assert out == [] 

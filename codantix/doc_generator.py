@@ -1,5 +1,8 @@
 """
 Documentation generation for Codantix.
+
+This module provides the DocumentationGenerator class, which generates documentation for code elements using LLMs and customizable templates.
+Supports Google, NumPy, and JSDoc styles.
 """
 from typing import Dict, List, Optional
 from dataclasses import dataclass
@@ -24,16 +27,33 @@ class DocTemplate:
     method_template: str
 
 class DocumentationGenerator:
-    """Generates documentation for code elements."""
+    """
+    Generates documentation for code elements.
+
+    Uses LLMs and customizable templates to generate docstrings for modules, classes, functions, and methods.
+    Supports Google, NumPy, and JSDoc documentation styles.
+    """
 
     def __init__(self, doc_style: str = "google", api_key: Optional[str] = None):
+        """
+        Initialize the DocumentationGenerator.
+
+        Args:
+            doc_style (str): The documentation style to use ("google", "numpy", or "jsdoc").
+            api_key (Optional[str]): Optional API key for the LLM provider.
+        """
         self.doc_style = DocStyle(doc_style)
         self.templates = self._get_templates()
         if api_key:
             openai.api_key = api_key
 
     def _get_templates(self) -> Dict[DocStyle, DocTemplate]:
-        """Get documentation templates for different styles."""
+        """
+        Get documentation templates for different styles.
+
+        Returns:
+            Dict[DocStyle, DocTemplate]: Mapping of documentation styles to their templates.
+        """
         return {
             DocStyle.GOOGLE: DocTemplate(
                 style=DocStyle.GOOGLE,
@@ -165,7 +185,16 @@ Raises
         }
 
     def generate_doc(self, element: CodeElement, context: Dict[str, str]) -> str:
-        """Generate documentation for a code element."""
+        """
+        Generate documentation for a code element.
+
+        Args:
+            element (CodeElement): The code element to document.
+            context (Dict[str, str]): Project context for documentation (e.g., description, architecture).
+
+        Returns:
+            str: The generated documentation string.
+        """
         if element.existing_doc:
             return element.existing_doc
 
@@ -200,7 +229,16 @@ Raises
         return self._format_doc(doc_template, doc_content, element, context)
 
     def _create_prompt(self, element: CodeElement, context: Dict[str, str]) -> str:
-        """Create a prompt for the LLM."""
+        """
+        Create a prompt for the LLM.
+
+        Args:
+            element (CodeElement): The code element to document.
+            context (Dict[str, str]): Project context for documentation.
+
+        Returns:
+            str: The prompt string for the LLM.
+        """
         prompt = f"""Generate documentation for a {element.type.value} named '{element.name}'"""
         if element.parent:
             prompt += f" in class '{element.parent}'"
@@ -216,7 +254,15 @@ Raises
         return prompt
 
     def _generate_fallback_doc(self, element: CodeElement) -> str:
-        """Generate a simple fallback documentation when LLM is not available."""
+        """
+        Generate a simple fallback documentation when LLM is not available.
+
+        Args:
+            element (CodeElement): The code element to document.
+
+        Returns:
+            str: Fallback documentation string.
+        """
         if element.type == ElementType.MODULE:
             return f"Module {element.name}"
         elif element.type == ElementType.CLASS:
@@ -227,7 +273,18 @@ Raises
             return f"Method {element.name} of class {element.parent}"
 
     def _format_doc(self, template: str, content: str, element: CodeElement, context: Dict[str, str]) -> str:
-        """Format the documentation using the template."""
+        """
+        Format the documentation using the template.
+
+        Args:
+            template (str): The documentation template string.
+            content (str): The generated or fallback documentation content.
+            element (CodeElement): The code element being documented.
+            context (Dict[str, str]): Project context for documentation.
+
+        Returns:
+            str: The formatted documentation string.
+        """
         # Basic formatting
         format_args = {
             'description': content,

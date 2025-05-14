@@ -1,5 +1,12 @@
 """
 Command Line Interface for Codantix.
+
+This module provides the main CLI entrypoints for Codantix, allowing users to:
+- Document the entire repository (`codantix init`)
+- Document only changes in a pull request (`codantix doc-pr <sha>`)
+- Update the vector database with the latest documentation (`codantix update-db`)
+
+All commands provide user feedback and error reporting.
 """
 import click
 from pathlib import Path
@@ -18,7 +25,14 @@ def cli():
 
 @cli.command()
 def init():
-    """Initialize and document the entire repository."""
+    """Initialize and document the entire repository.
+
+    Scans all configured source paths, generates or updates documentation for all code elements,
+    and updates the vector database with the new documentation.
+
+    Raises:
+        SystemExit: If an error occurs during initialization.
+    """
     click.echo("Initializing repository documentation...")
     try:
         config = Config()
@@ -60,7 +74,17 @@ def init():
 @cli.command()
 @click.argument('sha')
 def doc_pr(sha: str):
-    """Document changes in a pull request."""
+    """Document changes in a pull request.
+
+    Args:
+        sha (str): The commit SHA identifying the pull request or commit to document.
+
+    Scans the code changes in the specified commit, generates or updates documentation for changed elements,
+    and updates the vector database accordingly.
+
+    Raises:
+        SystemExit: If an error occurs during PR documentation.
+    """
     click.echo(f"Documenting changes in PR with SHA: {sha}")
     try:
         repo_path = Path(os.getcwd())
@@ -69,6 +93,8 @@ def doc_pr(sha: str):
         inc = IncrementalDocumentation(repo_path, DocStyle(doc_style))
         changes = inc.process_commit(sha)
         docs = []
+        deleted_files = set()
+        deleted_elements = []  # (file_path, element_name, element_type)
         for change in changes:
             click.echo(f"{change.change_type.title()}: {change.element.file_path}::{change.element.name}")
             if change.change_type in ("new", "update"):
@@ -84,9 +110,24 @@ def doc_pr(sha: str):
                         }.items() if v is not None and isinstance(v, (str, int, float, bool))
                     }
                 })
+            elif change.change_type == "D":
+                deleted_files.add(str(change.element.file_path))
+                # Track any element type for targeted removal
+                deleted_elements.append((str(change.element.file_path), change.element.name, change.element.type.value))
+        emb_mgr = EmbeddingManager(config)
         if docs:
-            emb_mgr = EmbeddingManager(config)
             emb_mgr.update_database(docs)
+        # Remove all embeddings for deleted files
+        db = emb_mgr.db
+        if deleted_files:
+            for file_path in deleted_files:
+                if hasattr(db, "delete"):
+                    db.delete(filter={"file_path": file_path})
+        # Remove embeddings for deleted elements (any type)
+        if deleted_elements:
+            for file_path, name, elem_type in deleted_elements:
+                if hasattr(db, "delete"):
+                    db.delete(filter={"file_path": file_path, "element": name, "type": elem_type})
         click.echo("PR documentation and vector database update complete.")
     except Exception as e:
         click.echo(f"Error during PR documentation: {e}", err=True)
@@ -94,7 +135,13 @@ def doc_pr(sha: str):
 
 @cli.command()
 def update_db():
-    """Update the vector database with documentation."""
+    """Update the vector database with documentation.
+
+    Scans all configured source paths, generates documentation for all code elements, and updates the vector database.
+
+    Raises:
+        SystemExit: If an error occurs during the update.
+    """
     click.echo("Updating vector database...")
     try:
         config = Config()

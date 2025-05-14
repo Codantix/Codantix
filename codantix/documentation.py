@@ -1,5 +1,7 @@
 """
 Documentation parsing and generation for Codantix.
+
+This module provides utilities for extracting project context from README files, traversing codebases, and representing code elements for documentation.
 """
 import re
 from pathlib import Path
@@ -27,14 +29,26 @@ class CodeElement:
     parent: Optional[str] = None
 
 class ReadmeParser:
-    """Parser for README.md files to extract project context."""
+    """
+    Parser for README.md files to extract project context.
+    """
 
     def __init__(self):
-        """Initialize the README parser."""
+        """
+        Initialize the README parser.
+        """
         self.supported_extensions = {'.md'}
 
     def parse(self, readme_path: Path) -> Dict[str, str]:
-        """Parse a README.md file and extract project context."""
+        """
+        Parse a README.md file and extract project context.
+
+        Args:
+            readme_path (Path): Path to the README.md file.
+
+        Returns:
+            Dict[str, str]: Extracted context, including description, architecture, and purpose if found.
+        """
         if not readme_path.exists() or readme_path.suffix not in self.supported_extensions:
             return {}
 
@@ -59,14 +73,26 @@ class ReadmeParser:
         return context
 
 class CodebaseTraverser:
-    """Traverses the codebase to find elements needing documentation."""
+    """
+    Traverses the codebase to find elements needing documentation.
+    """
 
     def __init__(self):
-        """Initialize the codebase traverser."""
+        """
+        Initialize the codebase traverser.
+        """
         self.supported_extensions = {'.py'}
 
     def traverse(self, path: Path) -> List[CodeElement]:
-        """Traverse the codebase and find elements needing documentation."""
+        """
+        Traverse the codebase and find elements needing documentation.
+
+        Args:
+            path (Path): Path to the root directory to traverse.
+
+        Returns:
+            List[CodeElement]: List of code elements found in the codebase.
+        """
         if not path.exists():
             return []
 
@@ -77,13 +103,29 @@ class CodebaseTraverser:
         return elements
 
     def _process_file(self, file_path: Path) -> List[CodeElement]:
-        """Process a single file and extract code elements."""
+        """
+        Process a single file and extract code elements.
+
+        Args:
+            file_path (Path): Path to the file to process.
+
+        Returns:
+            List[CodeElement]: List of code elements found in the file.
+        """
         if file_path.suffix == '.py':
             return self._process_python_file(file_path)
         return []
 
     def _process_python_file(self, file_path: Path) -> List[CodeElement]:
-        """Process a Python file and extract code elements."""
+        """
+        Process a Python file and extract code elements.
+
+        Args:
+            file_path (Path): Path to the Python file to process.
+
+        Returns:
+            List[CodeElement]: List of code elements found in the Python file.
+        """
         elements = []
         try:
             with open(file_path, 'r') as f:

@@ -1,5 +1,7 @@
 """
 Git integration for Codantix to handle PR-based documentation.
+
+This module provides the GitIntegration class for extracting file changes, diffs, and content from a Git repository, supporting PR-based and incremental documentation workflows.
 """
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
@@ -9,22 +11,40 @@ from .documentation import CodeElement, ElementType
 
 @dataclass
 class FileChange:
-    """Represents a file change in a commit."""
+    """
+    Represents a file change in a commit.
+    """
     file_path: Path
     change_type: str  # 'A' for added, 'M' for modified, 'D' for deleted
     diff: str
     hunks: List[Tuple[int, int]]  # List of (start_line, end_line) tuples
 
 class GitIntegration:
-    """Handles Git operations for PR-based documentation."""
+    """
+    Handles Git operations for PR-based documentation.
+    Provides methods to extract changed files, diffs, file content, commit messages, and branch names from a repository.
+    """
 
     def __init__(self, repo_path: Path):
-        """Initialize Git integration with repository path."""
+        """
+        Initialize Git integration with repository path.
+
+        Args:
+            repo_path (Path): Path to the root of the Git repository.
+        """
         self.repo_path = repo_path
         self.repo = git.Repo(repo_path)
 
     def get_changed_files(self, commit_sha: str) -> List[FileChange]:
-        """Get list of files changed in a commit."""
+        """
+        Get list of files changed in a commit.
+
+        Args:
+            commit_sha (str): The commit SHA to analyze.
+
+        Returns:
+            List[FileChange]: List of file changes in the commit.
+        """
         try:
             commit = self.repo.commit(commit_sha)
             parent = commit.parents[0] if commit.parents else None
@@ -72,7 +92,15 @@ class GitIntegration:
             return []
 
     def _extract_hunks(self, diff: str) -> List[Tuple[int, int]]:
-        """Extract line number ranges from diff hunks."""
+        """
+        Extract line number ranges from diff hunks.
+
+        Args:
+            diff (str): The diff string to parse.
+
+        Returns:
+            List[Tuple[int, int]]: List of (start_line, end_line) tuples for each hunk.
+        """
         hunks = []
         current_hunk = None
         current_start = None
@@ -106,7 +134,16 @@ class GitIntegration:
         return hunks
 
     def get_file_content(self, file_path: Path, commit_sha: str) -> Optional[str]:
-        """Get the content of a file at a specific commit."""
+        """
+        Get the content of a file at a specific commit.
+
+        Args:
+            file_path (Path): Path to the file.
+            commit_sha (str): The commit SHA to retrieve the file from.
+
+        Returns:
+            Optional[str]: File content as a string, or None if not found.
+        """
         try:
             commit = self.repo.commit(commit_sha)
             blob = commit.tree[str(file_path)]
@@ -116,7 +153,15 @@ class GitIntegration:
             return None
 
     def get_commit_message(self, commit_sha: str) -> Optional[str]:
-        """Get the commit message for a specific commit."""
+        """
+        Get the commit message for a specific commit.
+
+        Args:
+            commit_sha (str): The commit SHA to retrieve the message from.
+
+        Returns:
+            Optional[str]: Commit message string, or None if not found.
+        """
         try:
             commit = self.repo.commit(commit_sha)
             return commit.message
@@ -125,7 +170,15 @@ class GitIntegration:
             return None
 
     def get_branch_name(self, commit_sha: str) -> Optional[str]:
-        """Get the branch name for a specific commit."""
+        """
+        Get the branch name for a specific commit.
+
+        Args:
+            commit_sha (str): The commit SHA to retrieve the branch name from.
+
+        Returns:
+            Optional[str]: Branch name string, or None if not found.
+        """
         try:
             commit = self.repo.commit(commit_sha)
             for branch in self.repo.heads:
