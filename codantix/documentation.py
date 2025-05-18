@@ -9,24 +9,9 @@ from typing import Dict, List, Optional, Set
 import ast
 from dataclasses import dataclass
 from enum import Enum
+from codantix.config import LANGUAGE_EXTENSION_MAP, CodeElement, ElementType
+from codantix.parsers import get_parser
 
-class ElementType(Enum):
-    """Types of code elements that need documentation."""
-    MODULE = "module"
-    CLASS = "class"
-    FUNCTION = "function"
-    METHOD = "method"
-
-@dataclass
-class CodeElement:
-    """Represents a code element that needs documentation."""
-    name: str
-    type: ElementType
-    file_path: Path
-    line_number: int
-    docstring: Optional[str] = None
-    existing_doc: Optional[str] = None
-    parent: Optional[str] = None
 
 class ReadmeParser:
     """
@@ -77,11 +62,15 @@ class CodebaseTraverser:
     Traverses the codebase to find elements needing documentation.
     """
 
-    def __init__(self):
+    def __init__(self, languages: List[str]):
         """
-        Initialize the codebase traverser.
+        Initialize the codebase traverser with config.
+        Args:
+            languages: List of languages to traverse.
         """
-        self.supported_extensions = {'.py'}
+        assert all(lang.lower() in LANGUAGE_EXTENSION_MAP for lang in languages), f"Invalid language: {languages}. Must be one of: {LANGUAGE_EXTENSION_MAP.keys()}"
+        self.languages = languages
+        self.supported_extensions = {ext for lang in languages for ext in LANGUAGE_EXTENSION_MAP.get(lang.lower(), set())}
 
     def traverse(self, path: Path) -> List[CodeElement]:
         """
@@ -99,87 +88,23 @@ class CodebaseTraverser:
         elements = []
         for file_path in path.rglob('*'):
             if file_path.suffix in self.supported_extensions:
-                elements.extend(self._process_file(file_path))
+                elements.extend(self._process_file_with_parser(file_path))
         return elements
 
-    def _process_file(self, file_path: Path) -> List[CodeElement]:
+    def _process_file_with_parser(self, file_path: Path) -> List[CodeElement]:
         """
-        Process a single file and extract code elements.
-
-        Args:
-            file_path (Path): Path to the file to process.
-
-        Returns:
-            List[CodeElement]: List of code elements found in the file.
+        Generic file processor using the appropriate parser for the file type.
         """
-        if file_path.suffix == '.py':
-            return self._process_python_file(file_path)
-        return []
-
-    def _process_python_file(self, file_path: Path) -> List[CodeElement]:
-        """
-        Process a Python file and extract code elements.
-
-        Args:
-            file_path (Path): Path to the Python file to process.
-
-        Returns:
-            List[CodeElement]: List of code elements found in the Python file.
-        """
-        elements = []
         try:
             with open(file_path, 'r') as f:
                 content = f.read()
-                tree = ast.parse(content)
-                
-                # Get module docstring
-                module_doc = ast.get_docstring(tree)
-                elements.append(CodeElement(
-                    name=file_path.stem,
-                    type=ElementType.MODULE,
-                    file_path=file_path,
-                    line_number=1,
-                    existing_doc=module_doc
-                ))
-
-                # Process classes and their methods
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.ClassDef):
-                        class_doc = ast.get_docstring(node)
-                        elements.append(CodeElement(
-                            name=node.name,
-                            type=ElementType.CLASS,
-                            file_path=file_path,
-                            line_number=node.lineno,
-                            existing_doc=class_doc
-                        ))
-                        
-                        # Process methods
-                        for method in node.body:
-                            if isinstance(method, ast.FunctionDef):
-                                method_doc = ast.get_docstring(method)
-                                elements.append(CodeElement(
-                                    name=method.name,
-                                    type=ElementType.METHOD,
-                                    file_path=file_path,
-                                    line_number=method.lineno,
-                                    existing_doc=method_doc,
-                                    parent=node.name
-                                ))
-                    
-                    # Process standalone functions
-                    elif isinstance(node, ast.FunctionDef):
-                        func_doc = ast.get_docstring(node)
-                        elements.append(CodeElement(
-                            name=node.name,
-                            type=ElementType.FUNCTION,
-                            file_path=file_path,
-                            line_number=node.lineno,
-                            existing_doc=func_doc
-                        ))
-
+                parser = get_parser(file_path)
+                if parser:
+                    elements = parser.parse_file(content, 1, len(content.splitlines()))
+                    for e in elements:
+                        e.file_path = file_path
+                    return elements
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
             return []
-
-        return elements 
+        return [] 

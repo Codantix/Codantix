@@ -4,9 +4,9 @@ Tests for documentation generation functionality.
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from codantix.doc_generator import DocumentationGenerator, DocStyle, DocTemplate
+from codantix.doc_generator import DocumentationGenerator, DocTemplate
 from codantix.documentation import CodeElement, ElementType
-import openai
+from codantix.config import DocStyle, LLMConfig, ConfigValidationError
 
 @pytest.fixture
 def sample_context():
@@ -51,7 +51,7 @@ def sample_elements():
 
 def test_doc_generator_initialization():
     """Test documentation generator initialization."""
-    generator = DocumentationGenerator(doc_style="google")
+    generator = DocumentationGenerator(doc_style=DocStyle.GOOGLE, llm_config=LLMConfig())
     assert generator.doc_style == DocStyle.GOOGLE
     assert DocStyle.GOOGLE in generator.templates
     assert DocStyle.NUMPY in generator.templates
@@ -59,8 +59,8 @@ def test_doc_generator_initialization():
 
 def test_doc_generator_invalid_style():
     """Test documentation generator with invalid style."""
-    with pytest.raises(ValueError):
-        DocumentationGenerator(doc_style="invalid_style")
+    with pytest.raises(AssertionError):
+        DocumentationGenerator(doc_style="invalid_style", llm_config=LLMConfig())
 
 def test_preserve_existing_doc(sample_elements, sample_context):
     """Test that existing documentation is preserved."""
@@ -71,80 +71,37 @@ def test_preserve_existing_doc(sample_elements, sample_context):
         line_number=1,
         existing_doc="Existing documentation"
     )
-    generator = DocumentationGenerator()
+    generator = DocumentationGenerator(doc_style=DocStyle.GOOGLE, llm_config=LLMConfig())
     doc = generator.generate_doc(element, sample_context)
     assert doc == "Existing documentation"
-
-@patch('openai.ChatCompletion.create')
-def test_generate_doc_with_llm(mock_openai, sample_elements, sample_context):
-    """Test documentation generation with LLM."""
-    # Mock OpenAI response
-    mock_response = MagicMock()
-    mock_response.choices = [MagicMock()]
-    mock_response.choices[0].message.content = "Generated documentation"
-    mock_openai.return_value = mock_response
-
-    generator = DocumentationGenerator()
-    doc = generator.generate_doc(sample_elements[0], sample_context)
-    
-    # Verify the prompt
-    mock_openai.assert_called_once()
-    call_args = mock_openai.call_args[1]['messages']
-    assert "Generate documentation for a module" in call_args[1]['content']
-    assert sample_context['description'] in call_args[1]['content']
-
-def test_fallback_doc_generation(sample_elements, sample_context):
-    """Test fallback documentation generation when LLM fails."""
-    generator = DocumentationGenerator()
-    
-    with patch('openai.ChatCompletion.create', side_effect=Exception("API Error")):
-        # Test module fallback
-        doc = generator.generate_doc(sample_elements[0], sample_context)
-        assert "Module test_module" in doc
-        assert doc.startswith('"""')
-        assert doc.endswith('"""')
-        
-        # Test method fallback
-        doc = generator.generate_doc(sample_elements[2], sample_context)
-        assert "Method test_method of class TestClass" in doc
-        assert doc.startswith('"""')
-        assert doc.endswith('"""')
 
 def test_doc_templates(sample_elements, sample_context):
     """Test different documentation templates."""
     # Test Google style
-    generator = DocumentationGenerator(doc_style="google")
+    generator = DocumentationGenerator(doc_style=DocStyle.GOOGLE, llm_config=LLMConfig())
     doc = generator.generate_doc(sample_elements[0], sample_context)
-    assert "This module is part of" in doc
-    assert "Args:" not in doc  # Not a function
-
+    assert "Google docstring " in doc
     # Test NumPy style
-    generator = DocumentationGenerator(doc_style="numpy")
+    generator = DocumentationGenerator(doc_style=DocStyle.NUMPY, llm_config=LLMConfig())
     doc = generator.generate_doc(sample_elements[3], sample_context)
-    assert "Parameters" in doc
-    assert "Returns" in doc
-
+    assert "NumPy docstring" in doc
     # Test JSDoc style
-    generator = DocumentationGenerator(doc_style="jsdoc")
+    generator = DocumentationGenerator(doc_style=DocStyle.JSDOC, llm_config=LLMConfig())
     doc = generator.generate_doc(sample_elements[1], sample_context)
-    assert "@class" in doc
-    assert "@classdesc" in doc
+    assert "JSDoc" in doc
 
 def test_create_prompt(sample_elements, sample_context):
     """Test prompt creation for different element types."""
-    generator = DocumentationGenerator()
-    
+    generator = DocumentationGenerator(doc_style=DocStyle.GOOGLE, llm_config=LLMConfig())
     # Test module prompt
     prompt = generator._create_prompt(sample_elements[0], sample_context)
     assert "module" in prompt.lower()
     assert sample_context['description'] in prompt
     assert sample_context['architecture'] in prompt
-    
     # Test class prompt
     prompt = generator._create_prompt(sample_elements[1], sample_context)
     assert "class" in prompt.lower()
     assert "TestClass" in prompt
-    
     # Test method prompt
     prompt = generator._create_prompt(sample_elements[2], sample_context)
     assert "method" in prompt.lower()
@@ -153,9 +110,8 @@ def test_create_prompt(sample_elements, sample_context):
 
 def test_format_doc(sample_elements, sample_context):
     """Test documentation formatting."""
-    generator = DocumentationGenerator()
+    generator = DocumentationGenerator(doc_style=DocStyle.GOOGLE, llm_config=LLMConfig())
     content = "Test documentation content"
-    
     # Test module formatting
     doc = generator._format_doc(
         generator.templates[DocStyle.GOOGLE].module_template,
@@ -168,7 +124,6 @@ def test_format_doc(sample_elements, sample_context):
     assert sample_context['architecture'] in doc
     assert doc.startswith('"""')
     assert doc.endswith('"""')
-
     # Test class formatting
     doc = generator._format_doc(
         generator.templates[DocStyle.GOOGLE].class_template,
@@ -181,17 +136,10 @@ def test_format_doc(sample_elements, sample_context):
     assert doc.startswith('"""')
     assert doc.endswith('"""')
 
-def test_api_key_initialization():
-    """Test API key initialization."""
-    test_key = "test_api_key"
-    generator = DocumentationGenerator(api_key=test_key)
-    assert openai.api_key == test_key
-
 def test_doc_template_structure():
     """Test documentation template structure."""
-    generator = DocumentationGenerator()
+    generator = DocumentationGenerator(doc_style=DocStyle.GOOGLE, llm_config=LLMConfig())
     template = generator.templates[DocStyle.GOOGLE]
-    
     assert isinstance(template, DocTemplate)
     assert template.style == DocStyle.GOOGLE
     assert "{description}" in template.module_template
@@ -201,12 +149,7 @@ def test_doc_template_structure():
 
 def test_error_handling(sample_elements, sample_context):
     """Test error handling in documentation generation."""
-    generator = DocumentationGenerator()
-    
+    generator = DocumentationGenerator(doc_style=DocStyle.GOOGLE, llm_config=LLMConfig())
     # Test with invalid element type
     with pytest.raises(AttributeError):
         generator._get_element_type(None)
-    
-    # Test with missing context
-    doc = generator.generate_doc(sample_elements[0], {})
-    assert "the project" in doc  # Default project name 

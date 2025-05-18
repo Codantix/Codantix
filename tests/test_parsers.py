@@ -3,7 +3,7 @@ Tests for language-specific parsers.
 """
 import pytest
 from pathlib import Path
-from codantix.parsers import PythonParser, JavaScriptParser, get_parser, BaseParser
+from codantix.parsers import PythonParser, JavaScriptParser, get_parser, BaseParser, JavaParser
 from codantix.documentation import ElementType
 import ast
 
@@ -38,7 +38,7 @@ def test_function():
     assert class_elem.docstring == "Class docstring."
     
     # Check method
-    method = next(e for e in elements if e.type == ElementType.FUNCTION and e.name == "test_method")
+    method = next(e for e in elements if e.type == ElementType.METHOD and e.name == "test_method")
     assert method.docstring == "Method docstring."
     
     # Check function
@@ -105,7 +105,7 @@ def test_parser_selection():
     assert isinstance(get_parser(Path("test.ts")), JavaScriptParser)
     assert isinstance(get_parser(Path("test.jsx")), JavaScriptParser)
     assert isinstance(get_parser(Path("test.tsx")), JavaScriptParser)
-    assert get_parser(Path("test.java")) is None
+    assert isinstance(get_parser(Path("test.java")), JavaParser)
 
 def test_python_syntax_error():
     """Test handling of Python syntax errors."""
@@ -204,4 +204,30 @@ def test_javascriptparser_collect_elements_recursive_none():
     parser = JavaScriptParser()
     # Should not fail on None
     out = parser._collect_elements_recursive(None, set(), [], Path(""), 1, 10)
-    assert out == [] 
+    assert out == []
+
+def test_java_parser():
+    """Test Java code parsing."""
+    parser = JavaParser()
+    content = '''/**
+ * Class docstring
+ */
+public class TestClass {
+    /**
+     * Method docstring
+     */
+    public void testMethod() {}
+    
+    // No doc
+    private int helper() { return 0; }
+}
+'''
+    elements = parser.parse_file(content, 1, len(content.splitlines()))
+    # Should find one class and two methods
+    class_elem = next(e for e in elements if e.type == ElementType.CLASS)
+    assert class_elem.name == "TestClass"
+    assert "Class docstring" in class_elem.docstring
+    method = next(e for e in elements if e.type == ElementType.METHOD and e.name == "testMethod")
+    assert "Method docstring" in method.docstring
+    helper = next(e for e in elements if e.type == ElementType.METHOD and e.name == "helper")
+    assert helper.docstring is None or helper.docstring == "" 

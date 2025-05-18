@@ -7,7 +7,9 @@ import git
 from codantix.incremental_doc import IncrementalDocumentation, DocumentationChange
 from codantix.documentation import CodeElement, ElementType
 from codantix.doc_generator import DocStyle
+from codantix.config import Config
 import os
+from unittest.mock import MagicMock
 
 @pytest.fixture
 def git_repo(tmp_path):
@@ -39,7 +41,7 @@ def git_repo(tmp_path):
 def test_process_commit(git_repo):
     """Test processing a commit for documentation changes."""
     repo_path, commit_sha = git_repo
-    incremental_doc = IncrementalDocumentation(repo_path)
+    incremental_doc = IncrementalDocumentation("test", repo_path)
     
     changes = incremental_doc.process_commit(commit_sha)
     assert len(changes) > 0
@@ -51,29 +53,54 @@ def test_process_commit(git_repo):
         assert change.new_doc is not None
         assert change.change_type in ['new', 'update', 'unchanged']
 
+def test_incremental_doc_constructor_defaults(git_repo):
+    repo_path, _ = git_repo
+    inc = IncrementalDocumentation("test", repo_path)
+    assert inc.repo_path == repo_path
+    assert inc.doc_generator.doc_style == DocStyle.GOOGLE
+    assert inc.doc_generator.llm_config is None or hasattr(inc.doc_generator.llm_config, 'provider')
+
+def test_incremental_doc_constructor_doc_style(git_repo):
+    repo_path, _ = git_repo
+    inc = IncrementalDocumentation("test", repo_path, doc_style=DocStyle.NUMPY)
+    assert inc.doc_generator.doc_style == DocStyle.NUMPY
+
+def test_incremental_doc_constructor_llm_config(git_repo):
+    from codantix.config import LLMConfig
+    repo_path, _ = git_repo
+    llm = LLMConfig(provider="openai", llm_model="gpt-4o-mini", max_tokens=2048)
+    inc = IncrementalDocumentation("test", repo_path, doc_style=DocStyle.JSDOC, llm_config=llm)
+    assert inc.doc_generator.doc_style == DocStyle.JSDOC
+    assert inc.doc_generator.llm_config == llm
+
+def test_incremental_doc_constructor_invalid_doc_style(git_repo):
+    repo_path, _ = git_repo
+    with pytest.raises(Exception):
+        IncrementalDocumentation("test", repo_path, doc_style="not_a_style")
+
 def test_different_doc_styles(git_repo):
     """Test documentation generation with different styles."""
     repo_path, commit_sha = git_repo
     
     # Test with Google style
-    google_doc = IncrementalDocumentation(repo_path, DocStyle.GOOGLE)
+    google_doc = IncrementalDocumentation("test", repo_path, doc_style=DocStyle.GOOGLE)
     google_changes = google_doc.process_commit(commit_sha)
     assert len(google_changes) > 0
     
     # Test with NumPy style
-    numpy_doc = IncrementalDocumentation(repo_path, DocStyle.NUMPY)
+    numpy_doc = IncrementalDocumentation("test", repo_path, doc_style=DocStyle.NUMPY)
     numpy_changes = numpy_doc.process_commit(commit_sha)
     assert len(numpy_changes) > 0
     
     # Test with JSDoc style
-    jsdoc_doc = IncrementalDocumentation(repo_path, DocStyle.JSDOC)
+    jsdoc_doc = IncrementalDocumentation("test", repo_path, doc_style=DocStyle.JSDOC)
     jsdoc_changes = jsdoc_doc.process_commit(commit_sha)
     assert len(jsdoc_changes) > 0
 
 def test_invalid_commit_sha(git_repo):
     """Test handling of invalid commit SHA."""
     repo_path, _ = git_repo
-    incremental_doc = IncrementalDocumentation(repo_path)
+    incremental_doc = IncrementalDocumentation("test", repo_path)
     
     changes = incremental_doc.process_commit('invalid-sha')
     assert len(changes) == 0
@@ -81,7 +108,7 @@ def test_invalid_commit_sha(git_repo):
 def test_skip_deleted_files(git_repo):
     """Test that deleted files are skipped."""
     repo_path, _ = git_repo
-    incremental_doc = IncrementalDocumentation(repo_path)
+    incremental_doc = IncrementalDocumentation("test", repo_path)
     
     # Create a commit that deletes a file
     repo = git.Repo(repo_path)
@@ -114,14 +141,11 @@ def test_project_context_extraction(tmp_path):
     (tmp_path / "test.py").write_text('"""Module docstring."""\n\ndef foo():\n    pass\n')
     repo.index.add(['test.py', 'README.md', 'codantix.config.json'])
     commit = repo.index.commit('Initial commit')
-    # Ensure config is loaded from tmp_path
     os.chdir(tmp_path)
-    # Run incremental doc
     from codantix.incremental_doc import IncrementalDocumentation
-    inc = IncrementalDocumentation(tmp_path)
+    inc = IncrementalDocumentation("MyProject", tmp_path)
     context = inc._get_project_context(commit.hexsha)
     assert context['name'] == 'MyProject'
-    # The description should be 'To test context extraction.'
     assert 'description' in context and context['description'] == 'To test context extraction.'
     assert 'architecture' in context and 'Layered' in context['architecture']
     assert 'purpose' in context and 'context extraction' in context['purpose']
@@ -129,7 +153,7 @@ def test_project_context_extraction(tmp_path):
 def test_existing_doc_extraction(git_repo):
     """Test that existing documentation is detected and used."""
     repo_path, commit_sha = git_repo
-    incremental_doc = IncrementalDocumentation(repo_path)
+    incremental_doc = IncrementalDocumentation("test", repo_path)
     changes = incremental_doc.process_commit(commit_sha)
     # Find a function with an existing docstring
     found = False

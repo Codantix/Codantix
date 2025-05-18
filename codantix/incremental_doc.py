@@ -11,7 +11,7 @@ from .git_integration import GitIntegration, FileChange
 from .documentation import CodeElement, ElementType, ReadmeParser
 from .doc_generator import DocumentationGenerator, DocStyle
 from .parsers import get_parser
-from .config import Config
+from .config import LLMConfig
 import os
 
 @dataclass
@@ -30,17 +30,19 @@ class IncrementalDocumentation:
     Integrates with Git to detect changed files and elements, and generates or updates documentation accordingly.
     """
 
-    def __init__(self, repo_path: Path, doc_style: DocStyle = DocStyle.GOOGLE):
+    def __init__(self, name: str, repo_path: Path, doc_style: DocStyle = DocStyle.GOOGLE, llm_config: LLMConfig = None):
         """
         Initialize incremental documentation generator.
 
         Args:
             repo_path (Path): Path to the repository root.
             doc_style (DocStyle): Documentation style to use.
+            llm_config (LLMConfig): LLM configuration.
         """
-        self.git_integration = GitIntegration(repo_path)
-        self.doc_generator = DocumentationGenerator(doc_style)
+        self.name = name
         self.repo_path = repo_path
+        self.git_integration = GitIntegration(repo_path)
+        self.doc_generator = DocumentationGenerator(doc_style=doc_style, llm_config=llm_config)
 
     def process_commit(self, commit_sha: str) -> List[DocumentationChange]:
         """
@@ -129,11 +131,8 @@ class IncrementalDocumentation:
         Returns:
             Dict: Project context dictionary (e.g., name, description, architecture).
         """
-        # Try to get project name from config
-        config = Config()
-        project_name = os.path.basename(os.path.abspath(self.repo_path))
-        if 'name' in config.config:
-            project_name = config.config['name']
+        # Use project name from self.config if available, else fallback to directory name
+        project_name = self.name or os.path.basename(os.path.abspath(self.repo_path))
 
         # Try to extract context from README.md in repo root
         readme_path = Path(self.repo_path) / "README.md"

@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 import ast
 import esprima
-from .documentation import CodeElement, ElementType
 import logging
+import re
+from codantix.config import LANGUAGE_EXTENSION_MAP, CodeElement, ElementType
+
 
 class BaseParser:
     """
@@ -75,43 +77,53 @@ class PythonParser(BaseParser):
         elements = []
         try:
             tree = ast.parse(content)
-            
-            # Handle module docstring
+            # Module docstring
             if tree.body and isinstance(tree.body[0], ast.Expr) and isinstance(tree.body[0].value, ast.Constant):
                 elements.append(CodeElement(
                     name="module",
                     type=ElementType.MODULE,
-                    file_path=Path(""),  # Will be set by caller
+                    file_path=Path(""),
                     line_number=1,
                     docstring=tree.body[0].value.value
                 ))
-
-            # Handle other elements
-            for node in ast.walk(tree):
-                if not hasattr(node, 'lineno') or not (start_line <= node.lineno <= end_line):
-                    continue
-
-                if isinstance(node, ast.FunctionDef):
-                    elements.append(CodeElement(
-                        name=node.name,
-                        type=ElementType.FUNCTION,
-                        file_path=Path(""),  # Will be set by caller
-                        line_number=node.lineno,
-                        docstring=self._get_docstring(node)
-                    ))
-                elif isinstance(node, ast.ClassDef):
+            # Helper to walk with parent context
+            def visit(node, parent_class=None):
+                if isinstance(node, ast.ClassDef):
                     elements.append(CodeElement(
                         name=node.name,
                         type=ElementType.CLASS,
-                        file_path=Path(""),  # Will be set by caller
+                        file_path=Path(""),
                         line_number=node.lineno,
                         docstring=self._get_docstring(node)
                     ))
-
+                    for item in node.body:
+                        visit(item, parent_class=node.name)
+                elif isinstance(node, ast.FunctionDef):
+                    if parent_class:
+                        elements.append(CodeElement(
+                            name=node.name,
+                            type=ElementType.METHOD,
+                            file_path=Path(""),
+                            line_number=node.lineno,
+                            docstring=self._get_docstring(node),
+                            parent=parent_class
+                        ))
+                    else:
+                        elements.append(CodeElement(
+                            name=node.name,
+                            type=ElementType.FUNCTION,
+                            file_path=Path(""),
+                            line_number=node.lineno,
+                            docstring=self._get_docstring(node)
+                        ))
+                # Recurse into other nodes that can contain classes/functions
+                elif hasattr(node, 'body') and isinstance(node.body, list):
+                    for item in node.body:
+                        visit(item, parent_class=parent_class)
+            visit(tree)
         except SyntaxError:
             logging.warning("Syntax error encountered while parsing Python file. Returning empty element list.")
             pass
-
         return elements
 
     def _get_docstring(self, node: ast.AST) -> Optional[str]:
@@ -361,6 +373,73 @@ class JavaScriptParser(BaseParser):
         
         return elements
 
+class JavaParser(BaseParser):
+    """
+    Parser for Java code (basic, regex-based for classes and methods).
+    """
+    def __init__(self):
+        super().__init__()
+        self.supported_extensions = ['.java']
+
+    def _clean_javadoc(self, value: str) -> str:
+        """
+        Clean and normalize a JavaDoc comment string.
+
+        Args:
+            value (str): Raw JavaDoc comment string.
+
+        Returns:
+            str: Cleaned docstring.
+        """
+        if not value:
+            return None
+        lines = value.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            line = line.strip()
+            if line.startswith('*'):
+                line = line[1:].strip()
+            if line:
+                cleaned_lines.append(line)
+        return '\n'.join(cleaned_lines) if cleaned_lines else None
+
+    def parse_file(self, content: str, start_line: int, end_line: int) -> List[CodeElement]:
+        elements = []
+        lines = content.splitlines()
+        # Only parse lines in the given range
+        code = '\n'.join(lines[start_line-1:end_line])
+        # Find class definitions
+        class_pattern = re.compile(r'(?:/\*\*([\s\S]*?)\*/\s*)?(?:public\s+)?class\s+(\w+)', re.MULTILINE | re.DOTALL)
+        for match in class_pattern.finditer(code):
+            raw_doc = match.group(1) if match.group(1) else None
+            doc = self._clean_javadoc(raw_doc) if raw_doc else None
+            name = match.group(2)
+            # Estimate line number
+            line_number = code[:match.start()].count('\n') + start_line
+            elements.append(CodeElement(
+                name=name,
+                type=ElementType.CLASS,
+                file_path=Path(""),
+                line_number=line_number,
+                docstring=doc
+            ))
+        # Find method definitions (very basic, public/protected/private returnType name(...))
+        method_pattern = re.compile(r'^\s*(?:/\*\*([\s\S]*?)\*/\s*)?(public|protected|private|static|\s)+[\w<>\[\]]+\s+(\w+)\s*\([^)]*\)\s*\{', re.MULTILINE)
+        for match in method_pattern.finditer(code):
+            raw_doc = match.group(1) if match.group(1) else None
+            doc = self._clean_javadoc(raw_doc) if raw_doc else None
+            name = match.group(3)
+            line_number = code[:match.start()].count('\n') + start_line
+            print(f"[DEBUG] JavaParser method: name={name}, raw_doc={repr(raw_doc)}, cleaned_doc={repr(doc)}")
+            elements.append(CodeElement(
+                name=name,
+                type=ElementType.METHOD,
+                file_path=Path(""),
+                line_number=line_number,
+                docstring=doc
+            ))
+        return elements
+
 def get_parser(file_path: Path) -> Optional[BaseParser]:
     """
     Get appropriate parser for file type.
@@ -373,9 +452,10 @@ def get_parser(file_path: Path) -> Optional[BaseParser]:
     """
     extension = file_path.suffix.lower()
     
-    if extension in ['.py']:
+    if extension in LANGUAGE_EXTENSION_MAP['python']:
         return PythonParser()
-    elif extension in ['.js', '.jsx', '.ts', '.tsx']:
+    elif extension in LANGUAGE_EXTENSION_MAP['javascript']:
         return JavaScriptParser()
-    
+    elif extension in LANGUAGE_EXTENSION_MAP['java']:
+        return JavaParser()
     return None 

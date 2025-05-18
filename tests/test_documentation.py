@@ -6,7 +6,6 @@ from pathlib import Path
 from codantix.documentation import (
     ReadmeParser,
     CodebaseTraverser,
-    CodeElement,
     ElementType
 )
 
@@ -68,44 +67,44 @@ def test_readme_parser_nonexistent():
 
 def test_codebase_traverser(sample_python_file):
     """Test codebase traverser functionality."""
-    traverser = CodebaseTraverser()
+    traverser = CodebaseTraverser(['python'])
     elements = traverser.traverse(sample_python_file.parent)
     
-    # Should find 5 elements: module, class, method, function, and the class itself
-    assert len(elements) == 5
+    # Should find 4 elements: module, class, method, function
+    assert len(elements) == 4
     
     # Check module
     module = next(e for e in elements if e.type == ElementType.MODULE)
-    assert module.name == "test"
-    assert module.existing_doc == "Module docstring."
+    assert module.name == "module"
+    assert module.docstring.strip() == "Module docstring."
     
     # Check class
     class_elem = next(e for e in elements if e.type == ElementType.CLASS)
     assert class_elem.name == "TestClass"
-    assert class_elem.existing_doc == "Class docstring."
-    
-    # Check method
-    method = next(e for e in elements if e.type == ElementType.METHOD)
-    assert method.name == "test_method"
-    assert method.existing_doc == "Method docstring."
-    assert method.parent == "TestClass"
+    assert class_elem.docstring.strip() == "Class docstring."
     
     # Check function
     function = next(e for e in elements if e.type == ElementType.FUNCTION)
     assert function.name == "test_function"
-    assert function.existing_doc == "Function docstring."
+    assert function.docstring.strip() == "Function docstring."
+
+    # Check method
+    method = next(e for e in elements if e.type == ElementType.METHOD)
+    assert method.name == "test_method"
+    assert method.docstring.strip() == "Method docstring."
+    assert method.parent == "TestClass"
 
 def test_codebase_traverser_unsupported_language(tmp_path):
     """Test codebase traverser with unsupported language."""
     js_file = tmp_path / "test.js"
     js_file.write_text("// JavaScript file")
     
-    traverser = CodebaseTraverser()
+    traverser = CodebaseTraverser(['python'])
     elements = traverser.traverse(tmp_path)
     assert len(elements) == 0
 
 def test_codebase_traverser_nonexistent_path():
     """Test codebase traverser with nonexistent path."""
-    traverser = CodebaseTraverser()
+    traverser = CodebaseTraverser(['python'])
     elements = traverser.traverse(Path("nonexistent"))
     assert len(elements) == 0 

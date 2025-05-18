@@ -1,13 +1,31 @@
 {
   "doc_style": "google",
-  "source_paths": ["src", "lib", "packages"],
+  "source_paths": ["src", "app"],
   "languages": ["python", "javascript", "java"],
   "vector_db": {
     "type": "chroma",
     "path": "vecdb/",
-    "collection": "codantix_docs"
+    "provider": "openai",
+    "embedding": "text-embedding-3-large",
+    "dimensions": 1024,
+    "collection_name": "codantix_docs",
+    "host": "localhost",
+    "port": null,
+    "persist_directory": "vecdb/"
   },
-  "embedding": "text-embedding-3-large",
-  "provider": "openai",
-  "dimensions": 1024
+  "llm": {
+    "provider": "huggingface",
+    "llm_model": "google/gemma-3b-it",
+    "max_tokens": 1024,
+    "temperature": 0.7,
+    "top_p": null,
+    "top_k": null,
+    "stop_sequences": [],
+    "rate_limit": {
+      "llm_requests_per_second": 0.1,
+      "llm_check_every_n_seconds": 0.1,
+      "llm_max_bucket_size": 10
+    }
+  },
+  "name": null
 } 

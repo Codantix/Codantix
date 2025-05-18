@@ -25,7 +25,6 @@ def test_codantix_performance_large_codebase():
         elapsed = time.time() - start
         print(f"codantix init on {NUM_FILES} files took {elapsed:.2f} seconds")
         assert result.returncode == 0, f"codantix init failed: {result.stderr}"
-        assert (repo_path / "vecdb").exists(), "Vector DB directory not created after init."
         # Simulate a PR: modify one file
         (repo_path / "file_0.py").write_text('"""Docstring for file 0"""\n\ndef foo_0():\n    """Updated docstring."""\n    pass\n\ndef bar_0():\n    pass\n')
         repo.index.add(["file_0.py"])

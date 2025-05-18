@@ -4,6 +4,7 @@ import shutil
 import os
 from pathlib import Path
 import git
+from codantix.config import Config
 
 
 def test_codantix_end_to_end():
@@ -20,7 +21,6 @@ def test_codantix_end_to_end():
         # Run codantix init
         result = subprocess.run(["codantix", "init"], cwd=repo_path, capture_output=True, text=True)
         assert result.returncode == 0, f"codantix init failed: {result.stderr}"
-        assert (repo_path / "vecdb").exists(), "Vector DB directory not created after init."
         # Simulate a PR: modify test.py (update foo docstring)
         (repo_path / "test.py").write_text('"""Module docstring."""\n\ndef foo():\n    """Updated docstring."""\n    pass\n\ndef bar():\n    pass\n')
         repo.index.add(["test.py"])

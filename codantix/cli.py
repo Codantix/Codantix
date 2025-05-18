@@ -17,6 +17,7 @@ from codantix.incremental_doc import IncrementalDocumentation, DocStyle
 from codantix.embedding import EmbeddingManager
 import os
 import sys
+from tqdm import tqdm
 
 @click.group()
 def cli():
@@ -42,20 +43,20 @@ def init(version, freeze):
     click.echo("Initializing repository documentation...")
     try:
         config = Config()
-        doc_style = config.get_doc_style()
-        source_paths = config.get_source_paths()
+        doc_style = config.doc_style
+        source_paths = config.source_paths
         repo_path = Path(os.getcwd())
-        generator = DocumentationGenerator(doc_style=doc_style)
+        generator = DocumentationGenerator(doc_style=doc_style, llm_config=config.llm)
         context = ReadmeParser().parse(repo_path / "README.md")
         context['name'] = repo_path.name
-        traverser = CodebaseTraverser()
+        traverser = CodebaseTraverser(config.languages)
         docs = []
         for src in source_paths:
             src_path = repo_path / src
             if not src_path.exists():
                 continue
             elements = traverser.traverse(src_path)
-            for element in elements:
+            for element in tqdm(elements, desc=f"Processing {src}"):
                 if freeze:
                     doc = element.existing_doc or ''
                 else:
@@ -76,7 +77,10 @@ def init(version, freeze):
                     "metadata": metadata
                 })
         if docs:
-            emb_mgr = EmbeddingManager(config)
+            emb_mgr = EmbeddingManager(config.vector_db.embedding, config.vector_db.provider, 
+                                       config.vector_db.vector_db_type, config.vector_db.dimensions, 
+                                       config.vector_db.collection_name, config.vector_db.host, 
+                                       config.vector_db.port, config.vector_db.persist_directory)
             emb_mgr.update_database(docs)
         click.echo("Repository documentation and vector database update complete.")
     except Exception as e:
@@ -103,13 +107,12 @@ def doc_pr(sha: str, version):
     try:
         repo_path = Path(os.getcwd())
         config = Config()
-        doc_style = config.get_doc_style()
-        inc = IncrementalDocumentation(repo_path, DocStyle(doc_style))
+        inc = IncrementalDocumentation(config.name, repo_path, doc_style=config.doc_style, llm_config=config.llm)
         changes = inc.process_commit(sha)
         docs = []
         deleted_files = set()
         deleted_elements = []  # (file_path, element_name, element_type)
-        for change in changes:
+        for change in tqdm(changes, desc="Processing changes"):
             click.echo(f"{change.change_type.title()}: {change.element.file_path}::{change.element.name}")
             if change.change_type in ("new", "update"):
                 metadata = {
@@ -131,7 +134,10 @@ def doc_pr(sha: str, version):
                 deleted_files.add(str(change.element.file_path))
                 # Track any element type for targeted removal
                 deleted_elements.append((str(change.element.file_path), change.element.name, change.element.type.value))
-        emb_mgr = EmbeddingManager(config)
+        emb_mgr = EmbeddingManager(config.vector_db.embedding, config.vector_db.provider, 
+                                   config.vector_db.vector_db_type, config.vector_db.dimensions, 
+                                   config.vector_db.collection_name, config.vector_db.host, 
+                                   config.vector_db.port, config.vector_db.persist_directory)
         if docs:
             emb_mgr.update_database(docs)
         # Remove all embeddings for deleted files
@@ -167,19 +173,19 @@ def update_db(version):
     try:
         config = Config()
         repo_path = Path(os.getcwd())
-        doc_style = config.get_doc_style()
-        source_paths = config.get_source_paths()
-        generator = DocumentationGenerator(doc_style=doc_style)
+        doc_style = config.doc_style
+        source_paths = config.source_paths
+        generator = DocumentationGenerator(doc_style=doc_style, llm_config=config.llm)
         context = ReadmeParser().parse(repo_path / "README.md")
         context['name'] = repo_path.name
-        traverser = CodebaseTraverser()
+        traverser = CodebaseTraverser(config.languages)
         docs = []
         for src in source_paths:
             src_path = repo_path / src
             if not src_path.exists():
                 continue
             elements = traverser.traverse(src_path)
-            for element in elements:
+            for element in tqdm(elements, desc=f"Processing {src}"):
                 doc = generator.generate_doc(element, context)
                 metadata = {
                     k: v for k, v in {
@@ -196,7 +202,10 @@ def update_db(version):
                     "text": doc,
                     "metadata": metadata
                 })
-        emb_mgr = EmbeddingManager(config)
+        emb_mgr = EmbeddingManager(config.vector_db.embedding, config.vector_db.provider, 
+                                   config.vector_db.vector_db_type, config.vector_db.dimensions, 
+                                   config.vector_db.collection_name, config.vector_db.host, 
+                                   config.vector_db.port, config.vector_db.persist_directory)
         emb_mgr.update_database(docs)
         click.echo("Vector database updated.")
     except Exception as e:

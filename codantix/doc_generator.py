@@ -6,10 +6,16 @@ Supports Google, NumPy, and JSDoc styles.
 """
 from typing import Dict, Optional
 from dataclasses import dataclass
-import openai
-from pathlib import Path
+import os
+import time
+import logging
+
+# New imports for chat model initialization and usage tracking
+from langchain_core.callbacks import get_usage_metadata_callback
+from langchain.chat_models import init_chat_model
+
 from .documentation import CodeElement, ElementType
-from .config import DocStyle
+from .config import DocStyle, LLMConfig
 
 
 @dataclass
@@ -29,18 +35,62 @@ class DocumentationGenerator:
     Supports Google, NumPy, and JSDoc documentation styles.
     """
 
-    def __init__(self, doc_style: str = "google", api_key: Optional[str] = None):
+    def __init__(self, doc_style: DocStyle = DocStyle.GOOGLE, llm_config: LLMConfig = LLMConfig()):
         """
         Initialize the DocumentationGenerator.
 
         Args:
-            doc_style (str): The documentation style to use ("google", "numpy", or "jsdoc").
-            api_key (Optional[str]): Optional API key for the LLM provider.
+            doc_style (DocStyle): The documentation style to use.
+            llm_config (LLMConfig): The configuration for the LLM.
+
+        Config options for rate limiting (all optional, with defaults):
+            llm_requests_per_second: float, default 0.1
+            llm_check_every_n_seconds: float, default 0.1
+            llm_max_bucket_size: int, default 10
         """
-        self.doc_style = DocStyle(doc_style)
+        assert doc_style in DocStyle, f"Invalid doc_style: {doc_style}. Must be one of: {DocStyle}"
+        self.doc_style = doc_style
+        self.llm_config = llm_config
         self.templates = self._get_templates()
-        if api_key:
-            openai.api_key = api_key
+        self.llm = self._init_llm()
+
+    def _init_llm(self):
+        """
+        Initialize the LLM based on provider and config.
+        Returns:
+            LLM instance compatible with LangChain.
+        Raises:
+            ImportError: If the required LLM provider is not installed.
+            ValueError: If required API keys are not set in the environment.
+            NotImplementedError: If the provider is not supported.
+        """
+        provider = self.llm_config.provider
+        llm_model = self.llm_config.llm_model
+        try:
+            if provider == "huggingface":
+                from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
+                # Use model_id for HuggingFace
+                llm = HuggingFaceEndpoint(
+                    repo_id=llm_model,
+                    temperature=self.llm_config.temperature,
+                    max_new_tokens=self.llm_config.max_tokens,
+                    top_p=self.llm_config.top_p,
+                    top_k=self.llm_config.top_k,
+                    stop_sequences=self.llm_config.stop_sequences
+                )
+                return ChatHuggingFace(llm=llm, verbose=True)
+            else:
+                return init_chat_model(
+                    model_provider=provider,
+                    model=llm_model,
+                    temperature=self.llm_config.temperature,
+                    max_tokens=self.llm_config.max_tokens,
+                    top_p=self.llm_config.top_p,
+                    top_k=self.llm_config.top_k,
+                    stop_sequences=self.llm_config.stop_sequences
+                )
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize chat model for provider '{provider}' and model '{llm_model}': {e}")
 
     def _get_templates(self) -> Dict[DocStyle, DocTemplate]:
         """
@@ -189,12 +239,13 @@ Raises
 
         Returns:
             str: The generated documentation string.
+        Raises:
+            RuntimeError: If the LLM is not available or fails for a known reason.
         """
         if element.existing_doc:
             return element.existing_doc
 
         template = self.templates[self.doc_style]
-        
         # Get the appropriate template based on element type
         if element.type == ElementType.MODULE:
             doc_template = template.module_template
@@ -208,64 +259,108 @@ Raises
         # Generate documentation using LLM
         prompt = self._create_prompt(element, context)
         try:
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
+            if self.llm:
+                messages = [
                     {"role": "system", "content": "You are a documentation expert. Generate clear and concise documentation."},
                     {"role": "user", "content": prompt}
                 ]
-            )
-            doc_content = response.choices[0].message.content
+                with get_usage_metadata_callback() as cb:
+                    response = self.llm.invoke(messages)
+                    logging.info(cb.usage_metadata)
+                if isinstance(response, dict) and "content" in response:
+                    doc_content = response["content"]
+                elif hasattr(response, "content"):
+                    doc_content = response.content
+                else:
+                    doc_content = str(response)
+            else:
+                raise RuntimeError("No LLM available.")
         except Exception as e:
-            print(f"Error generating documentation: {e}")
-            return self._format_doc(doc_template, self._generate_fallback_doc(element), element, context)
+            # LangChain and provider-specific error handling
+            import traceback
+            tb = traceback.format_exc()
+            msg = str(e).lower()
+            if "rate limit" in msg or "429" in msg:
+                raise RuntimeError("LLM rate limit exceeded. Please wait and try again. See: https://python.langchain.com/docs/how_to/chat_model_rate_limiting/") from e
+            elif "quota" in msg or "exceeded your current quota" in msg:
+                raise RuntimeError("LLM quota exceeded for your API key/account. Please check your provider dashboard.") from e
+            elif "not found" in msg or "model not found" in msg or "downloaded" in msg:
+                raise RuntimeError("Requested LLM model not found or not downloaded. Please check your model name and provider.") from e
+            elif "permission" in msg or "unauthorized" in msg or "forbidden" in msg:
+                raise RuntimeError("Permission denied or unauthorized to use the selected LLM/model. Please check your API key and permissions.") from e
+            else:
+                raise RuntimeError(f"LLM error: {e}\nTraceback:\n{tb}") from e
 
         # Format the documentation using the template
         return self._format_doc(doc_template, doc_content, element, context)
 
-    def _create_prompt(self, element: CodeElement, context: Dict[str, str]) -> str:
+    def _get_hierarchy_context(self, element: CodeElement, context: Dict[str, str]) -> str:
         """
-        Create a prompt for the LLM.
+        Build a minimal hierarchy context for the code element.
+
+        For example, for a method in package/module/class/method:
+        - Package: short purpose (from context)
+        - Module: short purpose and role in package (from module docstring or context)
+        - Class: short purpose and role in module (from class docstring)
 
         Args:
             element (CodeElement): The code element to document.
             context (Dict[str, str]): Project context for documentation.
 
         Returns:
-            str: The prompt string for the LLM.
+            str: Hierarchy context as minimal one-line rows, most general first.
         """
-        prompt = f"""Generate documentation for a {element.type.value} named '{element.name}'"""
+        lines = []
+        # Package/project context
+        pkg_purpose = context.get('purpose') or context.get('description')
+        if pkg_purpose:
+            lines.append(f"Package: {pkg_purpose.splitlines()[0].strip()}")
+        # Module context
+        module_doc = None
+        if element.type in {ElementType.MODULE, ElementType.CLASS, ElementType.FUNCTION, ElementType.METHOD}:
+            # Try to get module docstring from context if available
+            module_doc = context.get('module_doc')
+            if not module_doc and hasattr(element, 'file_path') and element.file_path:
+                # Try to extract from context['module_docs'] if present (dict of file_path->doc)
+                module_docs = context.get('module_docs')
+                if module_docs and str(element.file_path) in module_docs:
+                    module_doc = module_docs[str(element.file_path)]
+        if module_doc:
+            lines.append(f"Module: {module_doc.splitlines()[0].strip()}")
+        # Class context
+        if element.type in {ElementType.CLASS, ElementType.METHOD} and hasattr(element, 'parent'):
+            class_doc = None
+            # Try to get class docstring from context if available
+            class_docs = context.get('class_docs')
+            if class_docs and element.parent in class_docs:
+                class_doc = class_docs[element.parent]
+            # Fallback: if this is a class, use its own docstring
+            if element.type == ElementType.CLASS and element.existing_doc:
+                class_doc = element.existing_doc
+            if class_doc:
+                lines.append(f"Class: {class_doc.splitlines()[0].strip()}")
+        return '\n'.join(lines)
+
+    def _create_prompt(self, element: CodeElement, context: Dict[str, str]) -> str:
+        """
+        Create a prompt for the LLM, including hierarchy context.
+        """
+        # Add hierarchy context at the top
+        hierarchy_context = self._get_hierarchy_context(element, context)
+        prompt = ""
+        if hierarchy_context:
+            prompt += f"Hierarchy context:\n{hierarchy_context}\n\n"
+        prompt += f"Generate documentation for a {element.type.value} named '{element.name}'"
         if element.parent:
             prompt += f" in class '{element.parent}'"
-        
         if context.get('description'):
             prompt += f"\nProject description: {context['description']}"
         if context.get('architecture'):
             prompt += f"\nArchitecture context: {context['architecture']}"
         if context.get('purpose'):
             prompt += f"\nProject purpose: {context['purpose']}"
-
-        prompt += "\n\nPlease provide a clear and concise description of what this code element does."
+        prompt += "\n\nPlease provide a clear and concise description of what this code element does, with at least one example of usage."
         return prompt
-
-    def _generate_fallback_doc(self, element: CodeElement) -> str:
-        """
-        Generate a simple fallback documentation when LLM is not available.
-
-        Args:
-            element (CodeElement): The code element to document.
-
-        Returns:
-            str: Fallback documentation string.
-        """
-        if element.type == ElementType.MODULE:
-            return f"Module {element.name}"
-        elif element.type == ElementType.CLASS:
-            return f"Class {element.name}"
-        elif element.type == ElementType.FUNCTION:
-            return f"Function {element.name}"
-        else:  # METHOD
-            return f"Method {element.name} of class {element.parent}"
 
     def _format_doc(self, template: str, content: str, element: CodeElement, context: Dict[str, str]) -> str:
         """
