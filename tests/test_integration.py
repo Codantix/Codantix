@@ -8,7 +8,7 @@ from codantix.config import Config
 import pytest
 
 
-@pytest.mark.skip(reason="Integration test is not working, fix huggingface integration first")
+# @pytest.mark.skip(reason="Integration test is not working, fix huggingface integration first")
 def test_codantix_end_to_end():
     """Integration test: run codantix CLI commands on a sample repo and simulate a PR, including deletion of a function."""
     with tempfile.TemporaryDirectory() as tmpdir:

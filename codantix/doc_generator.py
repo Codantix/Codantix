@@ -67,28 +67,15 @@ class DocumentationGenerator:
         provider = self.llm_config.provider
         llm_model = self.llm_config.llm_model
         try:
-            if provider == "huggingface":
-                from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
-                # Use model_id for HuggingFace
-                llm = HuggingFaceEndpoint(
-                    repo_id=llm_model,
-                    temperature=self.llm_config.temperature,
-                    max_new_tokens=self.llm_config.max_tokens,
-                    top_p=self.llm_config.top_p,
-                    top_k=self.llm_config.top_k,
-                    stop_sequences=self.llm_config.stop_sequences
-                )
-                return ChatHuggingFace(llm=llm, verbose=True)
-            else:
-                return init_chat_model(
-                    model_provider=provider,
-                    model=llm_model,
-                    temperature=self.llm_config.temperature,
-                    max_tokens=self.llm_config.max_tokens,
-                    top_p=self.llm_config.top_p,
-                    top_k=self.llm_config.top_k,
-                    stop_sequences=self.llm_config.stop_sequences
-                )
+            return init_chat_model(
+                model_provider=provider,
+                model=llm_model,
+                temperature=self.llm_config.temperature,
+                max_tokens=self.llm_config.max_tokens,
+                top_p=self.llm_config.top_p,
+                top_k=self.llm_config.top_k,
+                stop_sequences=self.llm_config.stop_sequences
+            )
         except Exception as e:
             raise RuntimeError(f"Failed to initialize chat model for provider '{provider}' and model '{llm_model}': {e}")
 

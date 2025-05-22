@@ -14,8 +14,8 @@
     "persist_directory": "vecdb/"
   },
   "llm": {
-    "provider": "huggingface",
-    "llm_model": "google/gemma-3b-it",
+    "provider": "ollama",
+    "llm_model": "tinyllama",
     "max_tokens": 1024,
     "temperature": 0.7,
     "top_p": null,
