@@ -54,8 +54,8 @@ class LLMConfig(BaseModel):
     """
     Configuration for the LLM.
     """
-    provider: str = Field("huggingface", description="LLM provider")
-    llm_model: str = Field("TinyLlama/TinyLlama-1.1B-Chat-v1.0", description="LLM model name")
+    provider: str = Field("google_genai", description="LLM provider")
+    llm_model: str = Field("gemini-2.5-flash-preview-04-17", description="LLM model name")
     max_tokens: int = Field(1024, description="Maximum number of tokens to generate")
     temperature: float = Field(0.7, description="Temperature for the LLM")
     top_p: Optional[float] = Field(None, description="Top-p for the LLM")
