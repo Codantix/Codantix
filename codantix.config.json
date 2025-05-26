@@ -14,8 +14,8 @@
     "persist_directory": "vecdb/"
   },
   "llm": {
-    "provider": "ollama",
-    "llm_model": "tinyllama",
+    "provider": "google_genai",
+    "llm_model": "gemini-2.5-flash-preview-04-17",
     "max_tokens": 1024,
     "temperature": 0.7,
     "top_p": null,

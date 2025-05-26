@@ -5,12 +5,13 @@ This module provides the main CLI entrypoints for Codantix, allowing users to:
 - Document the entire repository (`codantix init`)
 - Document only changes in a pull request (`codantix doc-pr <sha>`)
 - Update the vector database with the latest documentation (`codantix update-db`)
+- Generate a new configuration file (`codantix generate-config`)
 
 All commands provide user feedback and error reporting.
 """
 import click
 from pathlib import Path
-from codantix.config import Config
+from codantix.config import Config, DocStyle, VectorDBType, LANGUAGE_EXTENSION_MAP
 from codantix.documentation import CodebaseTraverser, ReadmeParser
 from codantix.doc_generator import DocumentationGenerator
 from codantix.incremental_doc import IncrementalDocumentation, DocStyle
@@ -210,6 +211,142 @@ def update_db(version):
         click.echo("Vector database updated.")
     except Exception as e:
         click.echo(f"Error during vector DB update: {e}", err=True)
+        sys.exit(1)
+
+@cli.command()
+def generate_config():
+    """Generate a new Codantix configuration file interactively.
+    
+    This command will guide you through creating a new codantix.config.json file
+    with all necessary settings for your project.
+    """
+    click.echo("Welcome to Codantix configuration generator!")
+    click.echo("Let's create your configuration file step by step.\n")
+
+    # Step 1: Project name
+    name = click.prompt("Enter your project name", type=str)
+    
+    # Step 2: Documentation style
+    doc_style = click.prompt(
+        "Choose documentation style",
+        type=click.Choice([style.value for style in DocStyle]),
+        default=DocStyle.GOOGLE.value
+    )
+    
+    # Step 3: Source paths
+    click.echo("\nEnter source paths (one per line, press Enter twice to finish):")
+    source_paths = []
+    while True:
+        path = click.prompt("Source path", default="", show_default=False)
+        if not path and source_paths:  # Allow empty input only if we have at least one path
+            break
+        if path:
+            source_paths.append(path)
+    
+    # Step 4: Languages
+    supported_langs = list(LANGUAGE_EXTENSION_MAP.keys())
+    click.echo(f"\nSupported languages: {', '.join(supported_langs)}")
+    languages = click.prompt(
+        "Choose languages (comma-separated)",
+        type=str,
+        default="python"
+    ).split(",")
+    languages = [lang.strip() for lang in languages]
+    
+    # Step 5: Vector DB configuration
+    click.echo("\nVector Database Configuration:")
+    vector_db_type = click.prompt(
+        "Choose vector database type",
+        type=click.Choice([db_type.value for db_type in VectorDBType]),
+        default=VectorDBType.CHROMA.value
+    )
+    
+    vector_db_provider = click.prompt(
+        "Enter vector DB provider",
+        type=str,
+        default="openai"
+    )
+    
+    vector_db_embedding = click.prompt(
+        "Enter embedding model",
+        type=str,
+        default="text-embedding-3-large"
+    )
+    
+    vector_db_dimensions = click.prompt(
+        "Enter embedding dimensions",
+        type=int,
+        default=1024
+    )
+    
+    # Step 6: LLM Configuration
+    click.echo("\nLLM Configuration:")
+    llm_provider = click.prompt(
+        "Enter LLM provider",
+        type=str,
+        default="google_genai"
+    )
+    
+    llm_model = click.prompt(
+        "Enter LLM model",
+        type=str,
+        default="gemini-2.5-flash-preview-04-17"
+    )
+    
+    max_tokens = click.prompt(
+        "Enter max tokens",
+        type=int,
+        default=1024
+    )
+    
+    temperature = click.prompt(
+        "Enter temperature",
+        type=float,
+        default=0.7
+    )
+    
+    # Create configuration
+    config = {
+        "name": name,
+        "doc_style": doc_style,
+        "source_paths": source_paths,
+        "languages": languages,
+        "vector_db": {
+            "type": vector_db_type,
+            "provider": vector_db_provider,
+            "embedding": vector_db_embedding,
+            "dimensions": vector_db_dimensions,
+            "path": "vecdb/",
+            "collection_name": "codantix_docs",
+            "host": "localhost",
+            "port": None,
+            "persist_directory": "vecdb/"
+        },
+        "llm": {
+            "provider": llm_provider,
+            "llm_model": llm_model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "top_p": None,
+            "top_k": None,
+            "stop_sequences": [],
+            "rate_limit": {
+                "llm_requests_per_second": 0.1,
+                "llm_check_every_n_seconds": 0.1,
+                "llm_max_bucket_size": 10
+            }
+        }
+    }
+    
+    # Save configuration
+    config_path = "codantix.config.json"
+    try:
+        with open(config_path, 'w') as f:
+            import json
+            json.dump(config, f, indent=2)
+        click.echo(f"\nConfiguration saved to {config_path}")
+    except Exception as e:
+        click.echo(f"Error saving configuration: {e}", err=True)
         sys.exit(1)
 
 if __name__ == '__main__':

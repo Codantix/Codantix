@@ -27,6 +27,11 @@
 - Embeds code/doc structure using LangChain
 - Stores into a vector database with hierarchical metadata for search
 
+### ⚙️ Interactive Configuration
+- Step-by-step configuration generation
+- Supports all major vector databases
+- Configurable LLM settings
+
 ---
 
 ## 🛠️ Tech Stack
@@ -36,23 +41,51 @@
 | Git diffing    | `GitPython`        |
 | Embedding & Vector DB | `LangChain` |
 | Language Support | Python, JS/TS, Java, Scala |
-| Doc Generation | OpenAI-compatible LLM |
+| Doc Generation | LangChain-compatible LLM |
 
 ---
 
 ## ⚙️ Configuration
 
-Create a `codantix.config.json` file in your project root:
+You can create a configuration file in two ways:
+
+1. Using the interactive generator:
+```bash
+codantix generate-config
+```
+
+2. Manually creating a `codantix.config.json` file in your project root:
 
 ```json
 {
+  "name": "your-project-name",
   "doc_style": "google",
   "source_paths": ["src", "lib", "packages"],
   "languages": ["python", "javascript", "java"],
   "vector_db": {
     "type": "chroma",
+    "provider": "openai",
+    "embedding": "text-embedding-3-large",
+    "dimensions": 1024,
     "path": "vecdb/",
-    "collection": "codantix_docs"
+    "collection_name": "codantix_docs",
+    "host": "localhost",
+    "port": null,
+    "persist_directory": "vecdb/"
+  },
+  "llm": {
+    "provider": "google_genai",
+    "llm_model": "gemini-2.5-flash-preview-04-17",
+    "max_tokens": 1024,
+    "temperature": 0.7,
+    "top_p": null,
+    "top_k": null,
+    "stop_sequences": [],
+    "rate_limit": {
+      "llm_requests_per_second": 0.1,
+      "llm_check_every_n_seconds": 0.1,
+      "llm_max_bucket_size": 10
+    }
   }
 }
 ```
@@ -70,8 +103,14 @@ Codantix supports multiple vector DBs via LangChain:
 {
   "vector_db": {
     "type": "chroma",
+    "provider": "openai",
+    "embedding": "text-embedding-3-large",
+    "dimensions": 1024,
     "path": "vecdb/",
-    "collection": "codantix_docs"
+    "collection_name": "codantix_docs",
+    "host": "localhost",
+    "port": null,
+    "persist_directory": "vecdb/"
   }
 }
 ```
@@ -81,10 +120,13 @@ Codantix supports multiple vector DBs via LangChain:
 {
   "vector_db": {
     "type": "qdrant",
+    "provider": "openai",
+    "embedding": "text-embedding-3-large",
+    "dimensions": 1024,
     "host": "localhost",
     "port": 6333,
     "api_key": "<QDRANT_API_KEY>",
-    "collection": "codantix_docs"
+    "collection_name": "codantix_docs"
   }
 }
 ```
@@ -94,9 +136,12 @@ Codantix supports multiple vector DBs via LangChain:
 {
   "vector_db": {
     "type": "milvus",
+    "provider": "openai",
+    "embedding": "text-embedding-3-large",
+    "dimensions": 1024,
     "host": "localhost",
     "port": 19530,
-    "collection": "codantix_docs"
+    "collection_name": "codantix_docs"
     // User and password are always taken from the environment:
     // MILVUS_USER and MILVUS_PASSWORD
   }
@@ -108,8 +153,11 @@ Codantix supports multiple vector DBs via LangChain:
 {
   "vector_db": {
     "type": "milvus_lite",
+    "provider": "openai",
+    "embedding": "text-embedding-3-large",
+    "dimensions": 1024,
     "path": "vecdb/",
-    "collection": "codantix_docs"
+    "collection_name": "codantix_docs"
   }
 }
 ```
@@ -126,6 +174,7 @@ These are **never** read from the config file for security.
 ## 🚀 CLI Usage
 
 ```bash
+codantix generate-config           # Generate configuration file interactively
 codantix init                      # Generate docs for full repo
 codantix init --freeze             # Only extract and embed existing docstrings, do not generate or update
 codantix init --version v1.2.0     # Index docs and tag with version 'v1.2.0'
@@ -154,7 +203,8 @@ More languages coming soon...
 
 - ✅ Multi-language support
 - ✅ PR-based documentation
-- ⏳ VSCode integration
+- ✅ Interactive configuration
+- ⏳ MCP server
 - ⏳ Natural language Q&A over your codebase
 - ⏳ Web dashboard for doc browsing
 
