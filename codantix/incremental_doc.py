@@ -4,25 +4,30 @@ Incremental documentation generation for Codantix.
 This module provides the IncrementalDocumentation class for generating and updating documentation based on code changes in pull requests or commits.
 Integrates with Git to detect changes and uses LLMs for doc generation.
 """
-from pathlib import Path
-from typing import Dict, List, Optional, Set
-from dataclasses import dataclass
-from .git_integration import GitIntegration, FileChange
-from .documentation import CodeElement, ElementType, ReadmeParser
-from .doc_generator import DocumentationGenerator, DocStyle
-from .parsers import get_parser
-from .config import LLMConfig
+
 import os
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from codantix.config import CodeElement, LLMConfig
+from codantix.doc_generator import DocStyle, DocumentationGenerator
+from codantix.documentation import ReadmeParser
+from codantix.git_integration import GitIntegration
+from codantix.parsers import get_parser
+
 
 @dataclass
 class DocumentationChange:
     """
     Represents a documentation change for a code element.
     """
+
     element: CodeElement
     old_doc: Optional[str]
     new_doc: str
     change_type: str  # 'new', 'update', 'unchanged'
+
 
 class IncrementalDocumentation:
     """
@@ -30,7 +35,13 @@ class IncrementalDocumentation:
     Integrates with Git to detect changed files and elements, and generates or updates documentation accordingly.
     """
 
-    def __init__(self, name: str, repo_path: Path, doc_style: DocStyle = DocStyle.GOOGLE, llm_config: LLMConfig = None):
+    def __init__(
+        self,
+        name: str,
+        repo_path: Path,
+        doc_style: DocStyle = DocStyle.GOOGLE,
+        llm_config: LLMConfig = None,
+    ):
         """
         Initialize incremental documentation generator.
 
@@ -42,7 +53,9 @@ class IncrementalDocumentation:
         self.name = name
         self.repo_path = repo_path
         self.git_integration = GitIntegration(repo_path)
-        self.doc_generator = DocumentationGenerator(doc_style=doc_style, llm_config=llm_config)
+        self.doc_generator = DocumentationGenerator(
+            doc_style=doc_style, llm_config=llm_config
+        )
 
     def process_commit(self, commit_sha: str) -> List[DocumentationChange]:
         """
@@ -58,27 +71,39 @@ class IncrementalDocumentation:
         file_changes = self.git_integration.get_changed_files(commit_sha)
 
         for file_change in file_changes:
-            if file_change.change_type == 'D':
+            if file_change.change_type == "D":
                 # For deleted files, get elements from the previous commit (parent)
-                parent_commit = self.git_integration.repo.commit(file_change.commit_sha).parents[0] if self.git_integration.repo.commit(file_change.commit_sha).parents else None
+                parent_commit = (
+                    self.git_integration.repo.commit(file_change.commit_sha).parents[0]
+                    if self.git_integration.repo.commit(file_change.commit_sha).parents
+                    else None
+                )
                 if parent_commit:
-                    content = self.git_integration.get_file_content(file_change.file_path, parent_commit.hexsha)
+                    content = self.git_integration.get_file_content(
+                        file_change.file_path, parent_commit.hexsha
+                    )
                     if content:
                         parser = get_parser(file_change.file_path)
                         if parser:
                             # Extract all elements in the deleted file
-                            elements = parser.parse_file(content, 1, len(content.splitlines()))
+                            elements = parser.parse_file(
+                                content, 1, len(content.splitlines())
+                            )
                             for element in elements:
-                                changes.append(DocumentationChange(
-                                    element=element,
-                                    old_doc=element.docstring,
-                                    new_doc=None,
-                                    change_type='D'
-                                ))
+                                changes.append(
+                                    DocumentationChange(
+                                        element=element,
+                                        old_doc=element.docstring,
+                                        new_doc=None,
+                                        change_type="D",
+                                    )
+                                )
                 # Skip further processing for deleted files
             else:
                 # Get file content at the commit
-                content = self.git_integration.get_file_content(file_change.file_path, commit_sha)
+                content = self.git_integration.get_file_content(
+                    file_change.file_path, commit_sha
+                )
                 if not content:
                     continue
 
@@ -103,21 +128,24 @@ class IncrementalDocumentation:
 
                         # Generate new documentation
                         new_doc = self.doc_generator.generate_doc(
-                            element,
-                            self._get_project_context(commit_sha)
+                            element, self._get_project_context(commit_sha)
                         )
 
                         # Determine change type
-                        change_type = 'new'
+                        change_type = "new"
                         if old_doc:
-                            change_type = 'update' if old_doc != new_doc else 'unchanged'
+                            change_type = (
+                                "update" if old_doc != new_doc else "unchanged"
+                            )
 
-                        changes.append(DocumentationChange(
-                            element=element,
-                            old_doc=old_doc,
-                            new_doc=new_doc,
-                            change_type=change_type
-                        ))
+                        changes.append(
+                            DocumentationChange(
+                                element=element,
+                                old_doc=old_doc,
+                                new_doc=new_doc,
+                                change_type=change_type,
+                            )
+                        )
 
         return changes
 
@@ -137,5 +165,5 @@ class IncrementalDocumentation:
         # Try to extract context from README.md in repo root
         readme_path = Path(self.repo_path) / "README.md"
         context = ReadmeParser().parse(readme_path)
-        context['name'] = project_name
-        return context 
+        context["name"] = project_name
+        return context

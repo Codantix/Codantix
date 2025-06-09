@@ -4,28 +4,29 @@ Documentation generation for Codantix.
 This module provides the DocumentationGenerator class, which generates documentation for code elements using LLMs and customizable templates.
 Supports Google, NumPy, and JSDoc styles.
 """
-from typing import Dict, Optional
-from dataclasses import dataclass
-import os
-import time
+
 import logging
+from dataclasses import dataclass
+from typing import Dict, Optional
 
-# New imports for chat model initialization and usage tracking
-from langchain_core.callbacks import get_usage_metadata_callback
 from langchain.chat_models import init_chat_model
+from langchain_core.callbacks import get_usage_metadata_callback
+from langchain_core.language_models import BaseChatModel
 
-from .documentation import CodeElement, ElementType
-from .config import DocStyle, LLMConfig
+from codantix.config import DocStyle, ElementType, LLMConfig
+from codantix.documentation import CodeElement
 
 
 @dataclass
 class DocTemplate:
     """Template for different documentation styles."""
+
     style: DocStyle
     module_template: str
     class_template: str
     function_template: str
     method_template: str
+
 
 class DocumentationGenerator:
     """
@@ -35,13 +36,19 @@ class DocumentationGenerator:
     Supports Google, NumPy, and JSDoc documentation styles.
     """
 
-    def __init__(self, doc_style: DocStyle = DocStyle.GOOGLE, llm_config: LLMConfig = LLMConfig()):
+    def __init__(
+        self,
+        doc_style: DocStyle = DocStyle.GOOGLE,
+        llm_config: Optional[LLMConfig] = None,
+        llm: Optional[BaseChatModel] = None,
+    ):
         """
         Initialize the DocumentationGenerator.
 
         Args:
             doc_style (DocStyle): The documentation style to use.
             llm_config (LLMConfig): The configuration for the LLM.
+            llm (BaseChatModel): The LLM to use.
 
         Config options for rate limiting (all optional, with defaults):
             llm_requests_per_second: float, default 0.1
@@ -50,9 +57,9 @@ class DocumentationGenerator:
         """
         assert doc_style in DocStyle, f"Invalid doc_style: {doc_style}. Must be one of: {DocStyle}"
         self.doc_style = doc_style
-        self.llm_config = llm_config
+        self.llm_config = llm_config or LLMConfig()
         self.templates = self._get_templates()
-        self.llm = self._init_llm()
+        self.llm = llm or self._init_llm()
 
     def _init_llm(self):
         """
@@ -74,10 +81,11 @@ class DocumentationGenerator:
                 max_tokens=self.llm_config.max_tokens,
                 top_p=self.llm_config.top_p,
                 top_k=self.llm_config.top_k,
-                stop_sequences=self.llm_config.stop_sequences
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize chat model for provider '{provider}' and model '{llm_model}': {e}")
+            raise RuntimeError(
+                f"Failed to initialize chat model for provider '{provider}' and model '{llm_model}': {e}"
+            )
 
     def _get_templates(self) -> Dict[DocStyle, DocTemplate]:
         """
@@ -126,7 +134,7 @@ Returns:
 
 Raises:
 {raises}
-\"\"\""""
+\"\"\"""",
             ),
             DocStyle.NUMPY: DocTemplate(
                 style=DocStyle.NUMPY,
@@ -177,7 +185,7 @@ Returns
 Raises
 ------
 {raises}
-\"\"\""""
+\"\"\"""",
             ),
             DocStyle.JSDOC: DocTemplate(
                 style=DocStyle.JSDOC,
@@ -212,8 +220,8 @@ Raises
  * @param {params}
  * @returns {returns}
  * @throws {throws}
- */"""
-            )
+ */""",
+            ),
         }
 
     def generate_doc(self, element: CodeElement, context: Dict[str, str]) -> str:
@@ -248,38 +256,42 @@ Raises
         try:
             if self.llm:
                 messages = [
-                    {"role": "system", "content": "You are a documentation expert. Generate clear and concise documentation."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "You are a documentation expert. Generate clear and concise documentation.",
+                    },
+                    {"role": "user", "content": prompt},
                 ]
                 with get_usage_metadata_callback() as cb:
                     response = self.llm.invoke(messages)
                     logging.info(cb.usage_metadata)
-                if isinstance(response, dict) and "content" in response:
-                    doc_content = response["content"]
-                elif hasattr(response, "content"):
-                    doc_content = response.content
-                else:
-                    doc_content = str(response)
+                return response
             else:
                 raise RuntimeError("No LLM available.")
         except Exception as e:
             # LangChain and provider-specific error handling
             import traceback
+
             tb = traceback.format_exc()
             msg = str(e).lower()
             if "rate limit" in msg or "429" in msg:
-                raise RuntimeError("LLM rate limit exceeded. Please wait and try again. See: https://python.langchain.com/docs/how_to/chat_model_rate_limiting/") from e
+                raise RuntimeError(
+                    "LLM rate limit exceeded. Please wait and try again. See: https://python.langchain.com/docs/how_to/chat_model_rate_limiting/"
+                ) from e
             elif "quota" in msg or "exceeded your current quota" in msg:
-                raise RuntimeError("LLM quota exceeded for your API key/account. Please check your provider dashboard.") from e
+                raise RuntimeError(
+                    "LLM quota exceeded for your API key/account. Please check your provider dashboard."
+                ) from e
             elif "not found" in msg or "model not found" in msg or "downloaded" in msg:
-                raise RuntimeError("Requested LLM model not found or not downloaded. Please check your model name and provider.") from e
+                raise RuntimeError(
+                    "Requested LLM model not found or not downloaded. Please check your model name and provider."
+                ) from e
             elif "permission" in msg or "unauthorized" in msg or "forbidden" in msg:
-                raise RuntimeError("Permission denied or unauthorized to use the selected LLM/model. Please check your API key and permissions.") from e
+                raise RuntimeError(
+                    "Permission denied or unauthorized to use the selected LLM/model. Please check your API key and permissions."
+                ) from e
             else:
                 raise RuntimeError(f"LLM error: {e}\nTraceback:\n{tb}") from e
-
-        # Format the documentation using the template
-        return self._format_doc(doc_template, doc_content, element, context)
 
     def _get_hierarchy_context(self, element: CodeElement, context: Dict[str, str]) -> str:
         """
@@ -299,26 +311,31 @@ Raises
         """
         lines = []
         # Package/project context
-        pkg_purpose = context.get('purpose') or context.get('description')
+        pkg_purpose = context.get("purpose") or context.get("description")
         if pkg_purpose:
             lines.append(f"Package: {pkg_purpose.splitlines()[0].strip()}")
         # Module context
         module_doc = None
-        if element.type in {ElementType.MODULE, ElementType.CLASS, ElementType.FUNCTION, ElementType.METHOD}:
+        if element.type in {
+            ElementType.MODULE,
+            ElementType.CLASS,
+            ElementType.FUNCTION,
+            ElementType.METHOD,
+        }:
             # Try to get module docstring from context if available
-            module_doc = context.get('module_doc')
-            if not module_doc and hasattr(element, 'file_path') and element.file_path:
+            module_doc = context.get("module_doc")
+            if not module_doc and hasattr(element, "file_path") and element.file_path:
                 # Try to extract from context['module_docs'] if present (dict of file_path->doc)
-                module_docs = context.get('module_docs')
+                module_docs = context.get("module_docs")
                 if module_docs and str(element.file_path) in module_docs:
                     module_doc = module_docs[str(element.file_path)]
         if module_doc:
             lines.append(f"Module: {module_doc.splitlines()[0].strip()}")
         # Class context
-        if element.type in {ElementType.CLASS, ElementType.METHOD} and hasattr(element, 'parent'):
+        if element.type in {ElementType.CLASS, ElementType.METHOD} and hasattr(element, "parent"):
             class_doc = None
             # Try to get class docstring from context if available
-            class_docs = context.get('class_docs')
+            class_docs = context.get("class_docs")
             if class_docs and element.parent in class_docs:
                 class_doc = class_docs[element.parent]
             # Fallback: if this is a class, use its own docstring
@@ -326,7 +343,7 @@ Raises
                 class_doc = element.existing_doc
             if class_doc:
                 lines.append(f"Class: {class_doc.splitlines()[0].strip()}")
-        return '\n'.join(lines)
+        return "\n".join(lines)
 
     def _create_prompt(self, element: CodeElement, context: Dict[str, str]) -> str:
         """
@@ -340,11 +357,12 @@ Raises
         prompt += f"Generate documentation for a {element.type.value} named '{element.name}'"
         if element.parent:
             prompt += f" in class '{element.parent}'"
-        if context.get('description'):
+        prompt += f"\nDocumentation style: {self.doc_style.value}"
+        if context.get("description"):
             prompt += f"\nProject description: {context['description']}"
-        if context.get('architecture'):
+        if context.get("architecture"):
             prompt += f"\nArchitecture context: {context['architecture']}"
-        if context.get('purpose'):
+        if context.get("purpose"):
             prompt += f"\nProject purpose: {context['purpose']}"
         prompt += "\n\nPlease provide a clear and concise description of what this code element does, with at least one example of usage."
         return prompt
@@ -364,33 +382,33 @@ Raises
         """
         # Basic formatting
         format_args = {
-            'description': content,
-            'project_name': context.get('name', 'the project'),
-            'architecture_context': context.get('architecture', ''),
-            'module_name': element.name if element.type == ElementType.MODULE else '',
-            'class_name': element.name if element.type == ElementType.CLASS else '',
-            'function_name': element.name if element.type == ElementType.FUNCTION else '',
-            'method_name': element.name if element.type == ElementType.METHOD else '',
-            'args': "",  # These would be extracted from the code
-            'returns': "",
-            'raises': "",
-            'attributes': "",
-            'methods': "",
-            'properties': "",
-            'params': "",
-            'throws': ""
+            "description": content,
+            "project_name": context.get("name", "the project"),
+            "architecture_context": context.get("architecture", ""),
+            "module_name": element.name if element.type == ElementType.MODULE else "",
+            "class_name": element.name if element.type == ElementType.CLASS else "",
+            "function_name": (element.name if element.type == ElementType.FUNCTION else ""),
+            "method_name": element.name if element.type == ElementType.METHOD else "",
+            "args": "",  # These would be extracted from the code
+            "returns": "",
+            "raises": "",
+            "attributes": "",
+            "methods": "",
+            "properties": "",
+            "params": "",
+            "throws": "",
         }
 
         # Add parent class context for methods
         if element.type == ElementType.METHOD and element.parent:
-            format_args['description'] = f"{content}\n\nPart of class: {element.parent}"
+            format_args["description"] = f"{content}\n\nPart of class: {element.parent}"
 
         try:
             # For Google style, ensure proper docstring formatting
             if self.doc_style == DocStyle.GOOGLE:
                 # Add class name to description for class elements
                 if element.type == ElementType.CLASS:
-                    format_args['description'] = f"Class {element.name}\n\n{content}"
+                    format_args["description"] = f"Class {element.name}\n\n{content}"
                 doc = template.format(**format_args)
                 if not doc.startswith('"""'):
                     doc = '"""\n' + doc
@@ -401,4 +419,4 @@ Raises
             return doc.strip()
         except KeyError as e:
             print(f"Error formatting documentation: {e}")
-            return content 
+            return content

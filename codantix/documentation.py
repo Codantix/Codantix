@@ -3,13 +3,12 @@ Documentation parsing and generation for Codantix.
 
 This module provides utilities for extracting project context from README files, traversing codebases, and representing code elements for documentation.
 """
+
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Set
-import ast
-from dataclasses import dataclass
-from enum import Enum
-from codantix.config import LANGUAGE_EXTENSION_MAP, CodeElement, ElementType
+from typing import Dict, List
+
+from codantix.config import LANGUAGE_EXTENSION_MAP, CodeElement
 from codantix.parsers import get_parser
 
 
@@ -22,7 +21,7 @@ class ReadmeParser:
         """
         Initialize the README parser.
         """
-        self.supported_extensions = {'.md'}
+        self.supported_extensions = {".md"}
 
     def parse(self, readme_path: Path) -> Dict[str, str]:
         """
@@ -34,28 +33,36 @@ class ReadmeParser:
         Returns:
             Dict[str, str]: Extracted context, including description, architecture, and purpose if found.
         """
-        if not readme_path.exists() or readme_path.suffix not in self.supported_extensions:
+        if (
+            not readme_path.exists()
+            or readme_path.suffix not in self.supported_extensions
+        ):
             return {}
 
         content = readme_path.read_text()
         context = {}
 
         # Extract description (everything between title and first section)
-        description_match = re.search(r'^# .*\n\n(.*?)(?=\n##|\Z)', content, re.DOTALL | re.MULTILINE)
+        description_match = re.search(
+            r"^# .*\n\n(.*?)(?=\n##|\Z)", content, re.DOTALL | re.MULTILINE
+        )
         if description_match:
-            context['description'] = description_match.group(1).strip()
+            context["description"] = description_match.group(1).strip()
 
         # Extract architecture
-        arch_match = re.search(r'## Architecture\n\n(.*?)(?=\n##|\Z)', content, re.DOTALL)
+        arch_match = re.search(
+            r"## Architecture\n\n(.*?)(?=\n##|\Z)", content, re.DOTALL
+        )
         if arch_match:
-            context['architecture'] = arch_match.group(1).strip()
+            context["architecture"] = arch_match.group(1).strip()
 
         # Extract purpose
-        purpose_match = re.search(r'## Purpose\n\n(.*?)(?=\n##|\Z)', content, re.DOTALL)
+        purpose_match = re.search(r"## Purpose\n\n(.*?)(?=\n##|\Z)", content, re.DOTALL)
         if purpose_match:
-            context['purpose'] = purpose_match.group(1).strip()
+            context["purpose"] = purpose_match.group(1).strip()
 
         return context
+
 
 class CodebaseTraverser:
     """
@@ -68,9 +75,15 @@ class CodebaseTraverser:
         Args:
             languages: List of languages to traverse.
         """
-        assert all(lang.lower() in LANGUAGE_EXTENSION_MAP for lang in languages), f"Invalid language: {languages}. Must be one of: {LANGUAGE_EXTENSION_MAP.keys()}"
+        assert all(
+            lang.lower() in LANGUAGE_EXTENSION_MAP for lang in languages
+        ), f"Invalid language: {languages}. Must be one of: {LANGUAGE_EXTENSION_MAP.keys()}"
         self.languages = languages
-        self.supported_extensions = {ext for lang in languages for ext in LANGUAGE_EXTENSION_MAP.get(lang.lower(), set())}
+        self.supported_extensions = {
+            ext
+            for lang in languages
+            for ext in LANGUAGE_EXTENSION_MAP.get(lang.lower(), set())
+        }
 
     def traverse(self, path: Path) -> List[CodeElement]:
         """
@@ -86,7 +99,7 @@ class CodebaseTraverser:
             return []
 
         elements = []
-        for file_path in path.rglob('*'):
+        for file_path in path.rglob("*"):
             if file_path.suffix in self.supported_extensions:
                 elements.extend(self._process_file_with_parser(file_path))
         return elements
@@ -96,7 +109,7 @@ class CodebaseTraverser:
         Generic file processor using the appropriate parser for the file type.
         """
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path, "r") as f:
                 content = f.read()
                 parser = get_parser(file_path)
                 if parser:
@@ -107,4 +120,4 @@ class CodebaseTraverser:
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
             return []
-        return [] 
+        return []
